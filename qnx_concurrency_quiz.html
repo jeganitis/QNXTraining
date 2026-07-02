@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>QNX Concurrent Programming — Quiz</title>
+<style>
+  :root {
+    --bg: #0f1720;
+    --card: #17212b;
+    --border: #2a3542;
+    --text: #e6edf3;
+    --muted: #8b98a5;
+    --accent: #35b3a1;
+    --correct: #2e7d4f;
+    --correct-bg: #16302188;
+    --wrong: #b3453f;
+    --wrong-bg: #3a1a1888;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 24px 16px 60px;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  .wrap { max-width: 760px; margin: 0 auto; }
+  h1 {
+    font-size: 22px;
+    margin: 0 0 4px;
+  }
+  .sub {
+    color: var(--muted);
+    font-size: 14px;
+    margin-bottom: 24px;
+  }
+  .progress {
+    font-size: 13px;
+    color: var(--muted);
+    margin-bottom: 20px;
+  }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px 20px 20px;
+    margin-bottom: 16px;
+  }
+  .qnum {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--accent);
+    margin-bottom: 6px;
+    font-weight: 600;
+  }
+  .qtext {
+    font-size: 16px;
+    line-height: 1.45;
+    margin-bottom: 14px;
+  }
+  .code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    background: #0d151c;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 2px 6px;
+    font-size: 14px;
+  }
+  .options { display: flex; flex-direction: column; gap: 8px; }
+  .opt {
+    text-align: left;
+    background: #1c2731;
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 14.5px;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .opt:hover:not(:disabled) {
+    border-color: var(--accent);
+  }
+  .opt:disabled { cursor: default; }
+  .opt.correct {
+    background: var(--correct-bg);
+    border-color: var(--correct);
+  }
+  .opt.wrong {
+    background: var(--wrong-bg);
+    border-color: var(--wrong);
+  }
+  .opt .tag {
+    float: right;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .explain {
+    margin-top: 12px;
+    padding: 10px 14px;
+    background: #10222188;
+    border-left: 3px solid var(--accent);
+    border-radius: 4px;
+    font-size: 14px;
+    line-height: 1.5;
+    color: #cdd9e2;
+    display: none;
+  }
+  .explain.show { display: block; }
+  .score-bar {
+    position: sticky;
+    top: 0;
+    background: var(--bg);
+    padding: 10px 0 14px;
+    z-index: 5;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 20px;
+  }
+  .score-bar .inner {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    max-width: 760px;
+    margin: 0 auto;
+  }
+  .score {
+    font-size: 15px;
+    font-weight: 600;
+  }
+  .score span { color: var(--accent); }
+  .reset {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .reset:hover { color: var(--text); border-color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="score-bar">
+  <div class="inner">
+    <div class="score">Score: <span id="scoreVal">0</span> / 10</div>
+    <button class="reset" onclick="resetQuiz()">Reset</button>
+  </div>
+</div>
+
+<div class="wrap">
+  <h1>QNX Concurrent Programming — Quiz</h1>
+  <div class="sub">Threads, scheduling, IPC, and synchronization. Tap an option to reveal the answer.</div>
+  <div id="quiz"></div>
+</div>
+
+<script>
+const questions = [
+  {
+    q: "By default, when a thread is created with <span class='code'>pthread_create()</span> on QNX, it is:",
+    options: ["Detached", "Joinable", "Suspended", "Bound to CPU 0"],
+    correct: 1,
+    explain: "The default pthread attribute is joinable. A thread must be explicitly created with PTHREAD_CREATE_DETACHED (via pthread_attr_setdetachstate) or call pthread_detach() to become detached."
+  },
+  {
+    q: "If a detached thread's process calls <span class='code'>exit()</span> while the thread is still running, what happens?",
+    options: [
+      "The detached thread continues running independently since it's detached",
+      "The entire process, including the detached thread, is terminated immediately",
+      "QNX automatically converts it to a joinable thread",
+      "The detached thread is respawned in a new process"
+    ],
+    correct: 1,
+    explain: "Detached only governs resource reclamation between peer threads — it does not protect a thread from process-level termination. exit() tears down the whole process, all threads included."
+  },
+  {
+    q: "Can a thread other than the one that created it call <span class='code'>pthread_join()</span> on it?",
+    options: [
+      "No, only the creating thread may join",
+      "Yes, any thread with the target's pthread_t handle can join it, as long as it's joinable",
+      "Only if the target thread is detached",
+      "Only the main thread is allowed to join any other thread"
+    ],
+    correct: 1,
+    explain: "POSIX threads are peers, not a parent-child hierarchy. Any thread holding a joinable target's pthread_t can call pthread_join() on it — but only one joiner is valid per target."
+  },
+  {
+    q: "A process terminates while its parent is still alive and hasn't called <span class='code'>wait()</span>. What state does the child enter?",
+    options: ["Orphan", "Zombie", "Detached", "Suspended"],
+    correct: 1,
+    explain: "It becomes a zombie: resources are released, but a minimal process-table entry (PID, exit status) persists until the parent calls wait()/waitpid() to reap it."
+  },
+  {
+    q: "What signal does the kernel automatically send to a parent when any of its child processes terminates?",
+    options: ["SIGTERM", "SIGCHLD", "SIGSTOP", "SIGUSR1"],
+    correct: 1,
+    explain: "SIGCHLD is generated unconditionally for every child termination. Its default disposition is to be ignored, which is why calling wait() alone (without catching the signal) is sufficient for simple reaping."
+  },
+  {
+    q: "Under <span class='code'>SCHED_FIFO</span>, two threads at the SAME priority are runnable on a single core. What happens?",
+    options: [
+      "The kernel time-slices between them automatically",
+      "Whichever thread is running keeps the CPU until it blocks, yields, or finishes — no time-based preemption between equals",
+      "Both threads are forcibly moved to different cores",
+      "The newer thread always preempts the older one"
+    ],
+    correct: 1,
+    explain: "SCHED_FIFO never preempts a same-priority thread on a timer. Only a higher-priority thread becoming ready, or the running thread blocking/yielding, changes who runs."
+  },
+  {
+    q: "Under <span class='code'>SCHED_RR</span>, what causes a running thread to lose the CPU to a same-priority peer?",
+    options: [
+      "Only an explicit call to sched_yield()",
+      "The kernel enforces a fixed time quantum; when it expires, the thread is rotated to the back of the same-priority ready queue",
+      "RR behaves identically to FIFO",
+      "The thread must call pthread_yield() manually every iteration"
+    ],
+    correct: 1,
+    explain: "Round robin adds a timeslice on top of FIFO's priority rules: at quantum expiry, the kernel automatically rotates same-priority ready threads, without any code changes needed."
+  },
+  {
+    q: "In QNX synchronous IPC (<span class='code'>MsgSend</span> / <span class='code'>MsgReceive</span> / <span class='code'>MsgReply</span>), what state is the client in immediately after calling MsgSend, before the reply arrives?",
+    options: ["RUNNING", "SEND Blocked transitioning to REPLY Blocked", "RECEIVE Blocked", "Zombie"],
+    correct: 1,
+    explain: "The client blocks the instant it calls MsgSend(); once the send data is copied to the server it moves to REPLY Blocked, remaining blocked until MsgReply() delivers the response."
+  },
+  {
+    q: "Why does QNX's synchronous IPC avoid the need for explicit application-level buffering between client and server?",
+    options: [
+      "Because messages are cached on disk",
+      "The kernel performs a direct copy between the client's and server's address spaces during MsgSend/MsgReply",
+      "Because QNX uses a global shared memory region for all IPC by default",
+      "Because clients and servers always run in the same address space"
+    ],
+    correct: 1,
+    explain: "The microkernel copies data directly between address spaces during the send and reply operations — no intermediate queueing buffer — which is a major reason QNX IPC is fast."
+  },
+  {
+    q: "To force two threads to genuinely contend for CPU time (useful when demonstrating FIFO vs RR scheduling), what should you do on a multi-core QNX target?",
+    options: [
+      "Nothing — SCHED_FIFO and SCHED_RR automatically restrict threads to one core",
+      "Pin both threads to the same core using ThreadCtl() with _NTO_TCTL_RUNMASK",
+      "Lower both threads' priority to SCHED_OTHER",
+      "Call pthread_detach() on both threads"
+    ],
+    correct: 1,
+    explain: "On SMP targets, threads can run in true parallel on separate cores, which masks any FIFO/RR distinction. Pinning both to the same core with ThreadCtl(_NTO_TCTL_RUNMASK) forces real contention so the scheduling policy's effect becomes visible."
+  }
+];
+
+let score = 0;
+let answered = new Array(questions.length).fill(false);
+
+function render() {
+  const container = document.getElementById('quiz');
+  container.innerHTML = '';
+  questions.forEach((item, qi) => {
+    const card = document.createElement('div');
+    card.className = 'card';
+
+    const num = document.createElement('div');
+    num.className = 'qnum';
+    num.textContent = `Question ${qi + 1} of ${questions.length}`;
+    card.appendChild(num);
+
+    const qtext = document.createElement('div');
+    qtext.className = 'qtext';
+    qtext.innerHTML = item.q;
+    card.appendChild(qtext);
+
+    const optWrap = document.createElement('div');
+    optWrap.className = 'options';
+
+    item.options.forEach((optText, oi) => {
+      const btn = document.createElement('button');
+      btn.className = 'opt';
+      btn.innerHTML = optText;
+      btn.onclick = () => selectAnswer(qi, oi);
+      optWrap.appendChild(btn);
+    });
+
+    card.appendChild(optWrap);
+
+    const explain = document.createElement('div');
+    explain.className = 'explain';
+    explain.id = `explain-${qi}`;
+    explain.textContent = item.explain;
+    card.appendChild(explain);
+
+    container.appendChild(card);
+  });
+}
+
+function selectAnswer(qi, oi) {
+  if (answered[qi]) return;
+  answered[qi] = true;
+
+  const card = document.querySelectorAll('.card')[qi];
+  const buttons = card.querySelectorAll('.opt');
+  const correctIdx = questions[qi].correct;
+
+  buttons.forEach((btn, i) => {
+    btn.disabled = true;
+    if (i === correctIdx) {
+      btn.classList.add('correct');
+      btn.innerHTML += ' <span class="tag">✓ Correct</span>';
+    } else if (i === oi) {
+      btn.classList.add('wrong');
+      btn.innerHTML += ' <span class="tag">✗ Your choice</span>';
+    }
+  });
+
+  if (oi === correctIdx) {
+    score++;
+    document.getElementById('scoreVal').textContent = score;
+  } else {
+    document.getElementById('scoreVal').textContent = score;
+  }
+
+  document.getElementById(`explain-${qi}`).classList.add('show');
+}
+
+function resetQuiz() {
+  score = 0;
+  answered = new Array(questions.length).fill(false);
+  document.getElementById('scoreVal').textContent = '0';
+  render();
+}
+
+render();
+</script>
+</body>
+</html>

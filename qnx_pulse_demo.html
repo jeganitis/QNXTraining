@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QNX Pulses — Worker &amp; Supervisor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0a121c;
+    --bg-raise:#0f1c29;
+    --card:#10202f;
+    --line:#1e3346;
+    --text:#e7eef4;
+    --muted:#7f95a8;
+    --teal:#3fc9b0;
+    --teal-dim:#1e5850;
+    --amber:#e6a94f;
+    --amber-dim:#5a4423;
+    --red:#e0685c;
+    --mono: 'IBM Plex Mono', ui-monospace, Menlo, Consolas, monospace;
+    --sans: 'IBM Plex Sans', -apple-system, Segoe UI, sans-serif;
+    --disp: 'Space Grotesk', var(--sans);
+  }
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{
+    margin:0;
+    background:
+      radial-gradient(1200px 600px at 15% -10%, #0f2436 0%, transparent 60%),
+      radial-gradient(900px 500px at 100% 10%, #0d1f2a 0%, transparent 55%),
+      var(--bg);
+    color:var(--text);
+    font-family:var(--sans);
+    line-height:1.5;
+  }
+  @media (prefers-reduced-motion: reduce){
+    *{ animation-duration:0.01ms !important; transition-duration:0.01ms !important; }
+  }
+
+  .wrap{max-width:1080px; margin:0 auto; padding:56px 24px 100px;}
+
+  /* ---------- Header ---------- */
+  header{ margin-bottom:52px; }
+  .eyebrow{
+    font-family:var(--mono);
+    font-size:12.5px;
+    letter-spacing:0.14em;
+    text-transform:uppercase;
+    color:var(--teal);
+    display:flex; align-items:center; gap:10px;
+    margin-bottom:16px;
+  }
+  .eyebrow::before{
+    content:'';
+    width:7px;height:7px;border-radius:50%;
+    background:var(--teal);
+    box-shadow:0 0 0 4px var(--teal-dim);
+  }
+  h1{
+    font-family:var(--disp);
+    font-weight:700;
+    font-size:clamp(30px,4.4vw,46px);
+    line-height:1.08;
+    margin:0 0 18px;
+    letter-spacing:-0.01em;
+  }
+  h1 em{ font-style:normal; color:var(--teal); }
+  .lede{
+    color:var(--muted);
+    font-size:16.5px;
+    max-width:640px;
+  }
+  .lede code{ color:#c9d8e3; }
+
+  code, .mono{ font-family:var(--mono); }
+  .card code{
+    background:#0a1520;
+    border:1px solid var(--line);
+    border-radius:5px;
+    padding:1px 6px;
+    font-size:0.92em;
+    color:#bfe8dd;
+  }
+
+  section{ margin-bottom:56px; }
+  h2{
+    font-family:var(--disp);
+    font-weight:600;
+    font-size:22px;
+    margin:0 0 6px;
+  }
+  .section-sub{ color:var(--muted); font-size:14.5px; margin-bottom:22px; max-width:620px; }
+
+  /* ---------- Concept strip ---------- */
+  .concept-grid{
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    gap:14px;
+  }
+  @media (max-width:760px){ .concept-grid{ grid-template-columns:1fr; } }
+  .concept{
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:12px;
+    padding:18px 20px;
+  }
+  .concept .k{
+    font-family:var(--mono);
+    font-size:12px;
+    color:var(--amber);
+    text-transform:uppercase;
+    letter-spacing:0.08em;
+    margin-bottom:8px;
+  }
+  .concept p{ margin:0; font-size:14px; color:#c3d1dc; }
+
+  /* ---------- Simulation ---------- */
+  .sim-card{
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:16px;
+    padding:28px 26px 24px;
+  }
+  .sim-controls{
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+    margin-bottom:26px;
+  }
+  button.ctl{
+    font-family:var(--mono);
+    font-size:13px;
+    background:var(--bg-raise);
+    border:1px solid var(--line);
+    color:var(--text);
+    padding:9px 16px;
+    border-radius:8px;
+    cursor:pointer;
+    transition:border-color .15s, background .15s;
+  }
+  button.ctl:hover{ border-color:var(--teal); }
+  button.ctl.primary{
+    background:var(--teal);
+    color:#04211c;
+    border-color:var(--teal);
+    font-weight:600;
+  }
+  button.ctl.primary:hover{ filter:brightness(1.08); }
+  button.ctl:disabled{ opacity:0.35; cursor:default; }
+  .speed{
+    margin-left:auto;
+    display:flex; align-items:center; gap:8px;
+    font-family:var(--mono); font-size:12px; color:var(--muted);
+  }
+  .speed input[type=range]{ accent-color:var(--teal); }
+
+  /* stage */
+  .stage{
+    position:relative;
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:0;
+    min-height:150px;
+    margin-bottom:20px;
+  }
+  .actor{
+    text-align:center;
+  }
+  .actor .box{
+    display:inline-flex;
+    flex-direction:column;
+    align-items:center;
+    gap:6px;
+    padding:14px 26px;
+    border-radius:12px;
+    border:1.5px solid var(--line);
+    background:var(--bg-raise);
+    min-width:150px;
+    transition:border-color .25s, box-shadow .25s;
+  }
+  .actor .box.active{
+    border-color:var(--teal);
+    box-shadow:0 0 0 5px var(--teal-dim);
+  }
+  .actor .box .name{ font-family:var(--disp); font-weight:600; font-size:16px; }
+  .actor .box .state{
+    font-family:var(--mono);
+    font-size:11px;
+    letter-spacing:0.04em;
+    color:var(--muted);
+    padding:3px 9px;
+    border-radius:20px;
+    background:#081119;
+    border:1px solid var(--line);
+  }
+  .actor .box .state.blocked{ color:var(--amber); border-color:var(--amber-dim); }
+  .actor .box .state.running{ color:var(--teal); border-color:var(--teal-dim); }
+  .actor .box .state.done{ color:var(--muted); }
+
+  .channel{
+    position:relative;
+    height:64px;
+    margin:8px 0 4px;
+  }
+  .channel .rail{
+    position:absolute;
+    top:50%; left:6%; right:6%;
+    height:2px;
+    background:linear-gradient(90deg, var(--line), var(--line));
+    transform:translateY(-50%);
+  }
+  .channel .label{
+    position:absolute; top:-2px; left:50%; transform:translateX(-50%);
+    font-family:var(--mono); font-size:10.5px; color:var(--muted);
+    background:var(--card); padding:0 8px;
+  }
+  .pulse-dot{
+    position:absolute;
+    top:50%;
+    width:15px; height:15px;
+    border-radius:50%;
+    background:var(--teal);
+    box-shadow:0 0 12px 2px rgba(63,201,176,0.55);
+    transform:translate(-50%,-50%);
+    left:6%;
+    opacity:0;
+    transition:left var(--dur,0.9s) linear, opacity 0.15s;
+  }
+  .pulse-dot.done{ background:var(--amber); box-shadow:0 0 12px 2px rgba(230,169,79,0.55); }
+  .pulse-dot.fly{ left:94%; opacity:1; }
+  .pulse-dot .plabel{
+    position:absolute;
+    top:-22px; left:50%; transform:translateX(-50%);
+    font-family:var(--mono); font-size:10px; white-space:nowrap; color:var(--text);
+  }
+
+  /* log */
+  .logs{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:14px;
+  }
+  @media (max-width:700px){ .logs{ grid-template-columns:1fr; } }
+  .term{
+    background:#060d14;
+    border:1px solid var(--line);
+    border-radius:10px;
+    height:210px;
+    overflow-y:auto;
+    font-family:var(--mono);
+    font-size:12.5px;
+    padding:12px 14px;
+  }
+  .term .hd{
+    font-family:var(--mono);
+    font-size:11px;
+    text-transform:uppercase;
+    letter-spacing:0.08em;
+    color:var(--muted);
+    margin-bottom:8px;
+    position:sticky; top:0;
+    background:#060d14;
+  }
+  .term .line{ color:#a9c3cd; margin-bottom:3px; opacity:0; animation:fadein .25s forwards; }
+  @keyframes fadein{ to{ opacity:1; } }
+  .term .line.hb{ color:var(--teal); }
+  .term .line.done{ color:var(--amber); }
+  .term .line.sys{ color:var(--muted); }
+  .term .line.err{ color:var(--red); }
+
+  /* ---------- Code panels ---------- */
+  .code-tabs{
+    display:flex; gap:8px; margin-bottom:14px;
+  }
+  .tab-btn{
+    font-family:var(--mono); font-size:12.5px;
+    background:transparent; color:var(--muted);
+    border:1px solid var(--line); border-radius:8px;
+    padding:7px 14px; cursor:pointer;
+  }
+  .tab-btn.active{ color:var(--text); border-color:var(--teal); background:var(--bg-raise); }
+  .code-panel{ display:none; }
+  .code-panel.active{ display:block; }
+  pre.code-block{
+    background:#060d14;
+    border:1px solid var(--line);
+    border-radius:12px;
+    padding:20px 22px;
+    overflow-x:auto;
+    font-family:var(--mono);
+    font-size:13px;
+    line-height:1.65;
+    color:#c7d6e0;
+  }
+  pre.code-block .c1{ color:#5c7387; font-style:italic; }
+  pre.code-block .kw{ color:#e6a94f; }
+  pre.code-block .fn{ color:#3fc9b0; }
+  pre.code-block .str{ color:#9fd68f; }
+  pre.code-block .hl{
+    display:block;
+    margin:0 -22px; padding:0 22px;
+    background:rgba(63,201,176,0.09);
+    border-left:2px solid var(--teal);
+  }
+
+  /* ---------- Cheat table ---------- */
+  table.cheat{
+    width:100%;
+    border-collapse:collapse;
+    font-size:14px;
+  }
+  table.cheat th, table.cheat td{
+    text-align:left;
+    padding:12px 14px;
+    border-bottom:1px solid var(--line);
+  }
+  table.cheat th{
+    font-family:var(--mono);
+    font-size:11.5px;
+    text-transform:uppercase;
+    letter-spacing:0.06em;
+    color:var(--muted);
+  }
+  table.cheat td.pulse{ color:var(--teal); }
+  table.cheat td.msg{ color:var(--amber); }
+  table.cheat tr:last-child td{ border-bottom:none; }
+
+  footer{
+    color:var(--muted);
+    font-size:12.5px;
+    font-family:var(--mono);
+    border-top:1px solid var(--line);
+    padding-top:20px;
+    margin-top:20px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="eyebrow">QNX Neutrino · Asynchronous IPC</div>
+    <h1>Pulses: the <em>non-blocking</em> half<br>of QNX message passing</h1>
+    <p class="lede">
+      A live walkthrough of <code>Worker.c</code> and <code>Supervisor.c</code> —
+      one process sending fixed-size, fire-and-forget notifications to another
+      over a named channel, and reading its PID back out with <code>ConnectClientInfo()</code>.
+    </p>
+  </header>
+
+  <section>
+    <div class="concept-grid">
+      <div class="concept">
+        <div class="k">What a pulse is</div>
+        <p>A tiny, fixed-format kernel message — one byte <b>code</b> + a 4-byte <b>value</b>. No reply is expected or possible. The sender never blocks waiting for the receiver.</p>
+      </div>
+      <div class="concept">
+        <div class="k">Why not MsgSend()</div>
+        <p>MsgSend() blocks the caller until MsgReply() — a synchronous rendezvous. A heartbeat shouldn't stall the worker's loop, so it uses MsgSendPulse() instead: queue it and move on.</p>
+      </div>
+      <div class="concept">
+        <div class="k">How it's told apart</div>
+        <p>MsgReceive() returns <code>rcvid == 0</code> for a pulse, versus a positive rcvid for a real blocking message that expects MsgReply().</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="sim-section">
+    <h2>Live sequence</h2>
+    <p class="section-sub">Steps through the exact call order in the two files: channel creation, connect, five heartbeats, then DONE. Watch the state labels and the two terminals.</p>
+
+    <div class="sim-card">
+      <div class="sim-controls">
+        <button class="ctl primary" id="playBtn">▶ Run sequence</button>
+        <button class="ctl" id="stepBtn">Step once</button>
+        <button class="ctl" id="resetBtn">Reset</button>
+        <div class="speed">
+          <span>speed</span>
+          <input type="range" id="speedSlider" min="1" max="3" value="2" step="1">
+        </div>
+      </div>
+
+      <div class="stage">
+        <div class="actor">
+          <div class="box" id="workerBox">
+            <div class="name">Worker</div>
+            <div class="state" id="workerState">not started</div>
+          </div>
+        </div>
+        <div class="actor">
+          <div class="box" id="supBox">
+            <div class="name">Supervisor</div>
+            <div class="state" id="supState">not started</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="channel">
+        <div class="label">channel "sup_pulse"</div>
+        <div class="rail"></div>
+        <div class="pulse-dot" id="pulseDot"><span class="plabel" id="pulseLabel"></span></div>
+      </div>
+
+      <div class="logs">
+        <div class="term">
+          <div class="hd">worker — stdout</div>
+          <div id="workerLog"></div>
+        </div>
+        <div class="term">
+          <div class="hd">supervisor — stdout</div>
+          <div id="supLog"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>The code being simulated</h2>
+    <p class="section-sub">Highlighted lines are what's currently executing at each step above.</p>
+    <div class="code-tabs">
+      <button class="tab-btn active" data-tab="worker">Worker.c</button>
+      <button class="tab-btn" data-tab="sup">Supervisor.c</button>
+    </div>
+
+    <div class="code-panel active" id="panel-worker">
+      <pre class="code-block" id="code-worker"><span class="c1">// Connect to the supervisor's named channel.</span>
+<span id="ln-w-open">int coid = name_open(<span class="str">"sup_pulse"</span>, 0);</span>
+if (coid == -1) { perror(<span class="str">"name_open(sup_pulse)"</span>); return 1; }
+
+<span class="c1">// Send a few heartbeats.</span>
+<span id="ln-w-loop">for (int i = 1; i &lt;= 5; ++i) {</span>
+<span id="ln-w-hb">    <span class="fn">MsgSendPulse</span>(coid, 10, PULSE_HEARTBEAT, i);</span>
+    printf(<span class="str">"[worker] sent heartbeat %d\n"</span>, i);
+    usleep(200 * 1000); <span class="c1">// 200 ms</span>
+}
+
+<span class="c1">// Tell supervisor we're done.</span>
+<span id="ln-w-done"><span class="fn">MsgSendPulse</span>(coid, 10, PULSE_DONE, 0);</span>
+name_close(coid);</pre>
+    </div>
+
+    <div class="code-panel" id="panel-sup">
+      <pre class="code-block" id="code-sup"><span class="c1">// Create a named channel so workers can connect.</span>
+<span id="ln-s-attach">name_attach_t *att = <span class="fn">name_attach</span>(NULL, <span class="str">"sup_pulse"</span>, 0);</span>
+
+<span id="ln-s-loop">for (;;) {</span>
+<span id="ln-s-recv">    int rcvid = <span class="fn">MsgReceive</span>(att-&gt;chid, &amp;msg, <span class="kw">sizeof</span>(msg), NULL);</span>
+
+    if (rcvid == 0) {  <span class="c1">// it's a pulse</span>
+        <span class="kw">switch</span> (msg.pulse.code) {
+        <span class="kw">case</span> _PULSE_CODE_DISCONNECT:
+            <span class="fn">ConnectDetach</span>(msg.pulse.scoid);
+            <span class="kw">break</span>;
+
+        <span id="ln-s-hb"><span class="kw">case</span> PULSE_HEARTBEAT: {
+            <span class="fn">ConnectClientInfo</span>(msg.pulse.scoid, &amp;ci, 0);
+            printf(<span class="str">"[supervisor] heartbeat from pid=%d val=%d\n"</span>, ci.pid, msg.pulse.value.sival_int);
+            <span class="kw">break</span>;
+        }</span>
+
+        <span id="ln-s-done"><span class="kw">case</span> PULSE_DONE: {
+            <span class="fn">ConnectClientInfo</span>(msg.pulse.scoid, &amp;ci, 0);
+            printf(<span class="str">"[supervisor] worker pid=%d DONE. Exiting.\n"</span>, ci.pid);
+            <span class="fn">name_detach</span>(att, 0);
+            <span class="kw">return</span> 0;
+        }</span>
+        }
+    }
+}</pre>
+    </div>
+  </section>
+
+  <section>
+    <h2>Pulse vs. blocking message</h2>
+    <p class="section-sub">The two IPC primitives sitting side by side on the same channel — Supervisor's <code>MsgReceive()</code> loop above handles either kind, distinguished only by <code>rcvid</code>.</p>
+    <table class="cheat">
+      <tr><th></th><th>Pulse</th><th>Blocking message</th></tr>
+      <tr><td>Call</td><td class="pulse">MsgSendPulse()</td><td class="msg">MsgSend()</td></tr>
+      <tr><td>Sender blocks?</td><td class="pulse">No — queues and returns immediately</td><td class="msg">Yes — REPLY Blocked until MsgReply()</td></tr>
+      <tr><td>Payload size</td><td class="pulse">Fixed: 1-byte code + 4-byte value</td><td class="msg">Arbitrary, defined by the message struct</td></tr>
+      <tr><td>Receiver sees</td><td class="pulse">rcvid == 0</td><td class="msg">rcvid &gt; 0 (must MsgReply or MsgError)</td></tr>
+      <tr><td>Typical use</td><td class="pulse">Heartbeats, timers, interrupt notification, "I'm done" signals</td><td class="msg">Request/response — reads, writes, RPC-style calls</td></tr>
+    </table>
+  </section>
+
+  <footer>
+    Simulation reconstructs the call order in Worker.c and Supervisor.c exactly as uploaded — no server-side execution, all state transitions are scripted client-side.
+  </footer>
+</div>
+
+<script>
+(function(){
+  const workerState = document.getElementById('workerState');
+  const supState = document.getElementById('supState');
+  const workerBox = document.getElementById('workerBox');
+  const supBox = document.getElementById('supBox');
+  const workerLog = document.getElementById('workerLog');
+  const supLog = document.getElementById('supLog');
+  const pulseDot = document.getElementById('pulseDot');
+  const pulseLabel = document.getElementById('pulseLabel');
+  const playBtn = document.getElementById('playBtn');
+  const stepBtn = document.getElementById('stepBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const speedSlider = document.getElementById('speedSlider');
+
+  function speedMs(){
+    // 1=slow,2=normal,3=fast
+    const v = parseInt(speedSlider.value,10);
+    return v === 1 ? 1500 : v === 2 ? 850 : 420;
+  }
+
+  function clearHighlights(){
+    document.querySelectorAll('pre.code-block span[id]').forEach(el=>el.classList.remove('hl'));
+  }
+  function hl(id){
+    clearHighlights();
+    const el = document.getElementById(id);
+    if(el) el.classList.add('hl');
+  }
+  function setActive(box, on){ box.classList.toggle('active', !!on); }
+  function setState(el, text, kind){
+    el.textContent = text;
+    el.className = 'state' + (kind ? ' '+kind : '');
+  }
+  function logLine(container, text, cls){
+    const d = document.createElement('div');
+    d.className = 'line' + (cls ? ' '+cls : '');
+    d.textContent = text;
+    container.appendChild(d);
+    container.parentElement.scrollTop = container.parentElement.scrollHeight;
+  }
+
+  function firePulse(kind, label, cb){
+    pulseDot.className = 'pulse-dot' + (kind==='done' ? ' done' : '');
+    pulseLabel.textContent = label;
+    pulseDot.style.setProperty('--dur', (speedMs()*0.55)+'ms');
+    pulseDot.style.left = '6%';
+    pulseDot.style.opacity = '0';
+    // force reflow then animate
+    void pulseDot.offsetWidth;
+    requestAnimationFrame(()=>{
+      pulseDot.classList.add('fly');
+      setTimeout(()=>{
+        pulseDot.style.opacity = '0';
+        pulseDot.classList.remove('fly');
+        if(cb) cb();
+      }, speedMs()*0.55);
+    });
+  }
+
+  // ---- scripted step sequence ----
+  let steps = [];
+  function buildSteps(){
+    steps = [];
+    steps.push(()=>{
+      setState(supState, 'name_attach()', 'running');
+      setActive(supBox, true);
+      hl('ln-s-attach');
+      logLine(supLog, '[supervisor] ready. name="sup_pulse"  chid=1', 'sys');
+    });
+    steps.push(()=>{
+      setState(supState, 'MsgReceive() — RECEIVE blocked', 'blocked');
+      hl('ln-s-recv');
+      setActive(supBox, false);
+    });
+    steps.push(()=>{
+      setState(workerState, 'name_open("sup_pulse")', 'running');
+      setActive(workerBox, true);
+      hl('ln-w-open');
+    });
+    for(let i=1;i<=5;i++){
+      (function(i){
+        steps.push(()=>{
+          setState(workerState, `MsgSendPulse HEARTBEAT (${i}/5)`, 'running');
+          hl('ln-w-hb');
+          logLine(workerLog, `[worker] sent heartbeat ${i}`, 'hb');
+          firePulse('hb', `HEARTBEAT val=${i}`, ()=>{
+            setState(supState, 'runnable → handling pulse', 'running');
+            setActive(supBox, true);
+            hl('ln-s-hb');
+            logLine(supLog, `[supervisor] heartbeat from pid=8231 val=${i}`, 'hb');
+          });
+        });
+        steps.push(()=>{
+          setState(workerState, 'usleep(200ms)', null);
+          setState(supState, 'MsgReceive() — RECEIVE blocked', 'blocked');
+          setActive(supBox, false);
+          hl('ln-s-recv');
+        });
+      })(i);
+    }
+    steps.push(()=>{
+      setState(workerState, 'MsgSendPulse DONE', 'running');
+      hl('ln-w-done');
+      logLine(workerLog, '[worker] sent DONE', 'done');
+      firePulse('done', 'DONE val=0', ()=>{
+        setState(supState, 'handling DONE pulse', 'running');
+        setActive(supBox, true);
+        hl('ln-s-done');
+        logLine(supLog, '[supervisor] worker pid=8231 DONE (val=0). Exiting.', 'done');
+      });
+    });
+    steps.push(()=>{
+      setState(workerState, 'name_close() → exit(0)', 'done');
+      setActive(workerBox, false);
+      setState(supState, 'name_detach() → exit(0)', 'done');
+      setActive(supBox, false);
+      clearHighlights();
+      logLine(supLog, '[supervisor] channel closed.', 'sys');
+      playBtn.disabled = true;
+      stepBtn.disabled = true;
+    });
+  }
+
+  let idx = 0;
+  let playing = false;
+  let timer = null;
+
+  function resetSim(){
+    playing = false;
+    clearTimeout(timer);
+    idx = 0;
+    buildSteps();
+    workerLog.innerHTML = '';
+    supLog.innerHTML = '';
+    clearHighlights();
+    setState(workerState, 'not started', null);
+    setState(supState, 'not started', null);
+    setActive(workerBox, false);
+    setActive(supBox, false);
+    pulseDot.classList.remove('fly','done');
+    pulseDot.style.opacity = '0';
+    playBtn.disabled = false;
+    stepBtn.disabled = false;
+    playBtn.textContent = '▶ Run sequence';
+  }
+
+  function doStep(){
+    if(idx >= steps.length) return false;
+    steps[idx]();
+    idx++;
+    return idx < steps.length;
+  }
+
+  function playLoop(){
+    if(!playing) return;
+    const more = doStep();
+    if(!more){ playing = false; playBtn.textContent = '▶ Run sequence'; return; }
+    timer = setTimeout(playLoop, speedMs());
+  }
+
+  playBtn.addEventListener('click', ()=>{
+    if(idx >= steps.length){ resetSim(); }
+    playing = !playing;
+    playBtn.textContent = playing ? '⏸ Pause' : '▶ Resume';
+    if(playing) playLoop();
+    else clearTimeout(timer);
+  });
+  stepBtn.addEventListener('click', ()=>{
+    playing = false;
+    clearTimeout(timer);
+    playBtn.textContent = '▶ Run sequence';
+    if(idx >= steps.length) resetSim();
+    doStep();
+  });
+  resetBtn.addEventListener('click', resetSim);
+
+  // tabs
+  document.querySelectorAll('.tab-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+      document.querySelectorAll('.code-panel').forEach(p=>p.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('panel-'+btn.dataset.tab).classList.add('active');
+    });
+  });
+
+  resetSim();
+})();
+</script>
+</body>
+</html>

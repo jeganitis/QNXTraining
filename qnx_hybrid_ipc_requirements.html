@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QNX Hybrid IPC — Requirements Specification</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0a121c;
+    --bg-raise:#0f1c29;
+    --card:#10202f;
+    --line:#1e3346;
+    --text:#e7eef4;
+    --muted:#7f95a8;
+    --teal:#3fc9b0;
+    --teal-dim:#1e5850;
+    --amber:#e6a94f;
+    --amber-dim:#5a4423;
+    --violet:#9a8cf2;
+    --violet-dim:#332e5c;
+    --red:#e0685c;
+    --mono:'IBM Plex Mono', ui-monospace, Menlo, Consolas, monospace;
+    --sans:'IBM Plex Sans', -apple-system, Segoe UI, sans-serif;
+    --disp:'Space Grotesk', var(--sans);
+  }
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{
+    margin:0;
+    background:
+      radial-gradient(1200px 600px at 15% -10%, #0f2436 0%, transparent 60%),
+      radial-gradient(900px 500px at 100% 10%, #0d1f2a 0%, transparent 55%),
+      var(--bg);
+    color:var(--text);
+    font-family:var(--sans);
+    line-height:1.55;
+  }
+  @media (prefers-reduced-motion: reduce){ *{ animation-duration:.01ms !important; transition-duration:.01ms !important; } }
+
+  .wrap{max-width:1100px;margin:0 auto;padding:56px 24px 110px;}
+
+  /* nav */
+  .toc{
+    position:sticky; top:0; z-index:20;
+    background:rgba(10,18,28,0.92);
+    backdrop-filter:blur(6px);
+    border-bottom:1px solid var(--line);
+    margin:0 0 48px;
+    padding:12px 0;
+  }
+  .toc-inner{
+    max-width:1100px;margin:0 auto;padding:0 24px;
+    display:flex; gap:18px; flex-wrap:wrap; align-items:center;
+    font-family:var(--mono); font-size:12px;
+  }
+  .toc a{ color:var(--muted); text-decoration:none; letter-spacing:.02em; }
+  .toc a:hover{ color:var(--teal); }
+  .toc .doc-id{ color:var(--teal); margin-right:auto; letter-spacing:.08em; }
+
+  header{ margin-bottom:52px; }
+  .eyebrow{
+    font-family:var(--mono); font-size:12.5px; letter-spacing:.14em; text-transform:uppercase;
+    color:var(--teal); display:flex; align-items:center; gap:10px; margin-bottom:16px;
+  }
+  .eyebrow::before{ content:''; width:7px;height:7px;border-radius:50%; background:var(--teal); box-shadow:0 0 0 4px var(--teal-dim); }
+  h1{
+    font-family:var(--disp); font-weight:700; font-size:clamp(28px,4.2vw,44px);
+    line-height:1.1; margin:0 0 18px; letter-spacing:-0.01em;
+  }
+  h1 em{ font-style:normal; color:var(--teal); }
+  .lede{ color:var(--muted); font-size:16.5px; max-width:680px; }
+  .meta-row{
+    display:flex; gap:28px; flex-wrap:wrap; margin-top:26px;
+    font-family:var(--mono); font-size:12.5px; color:var(--muted);
+  }
+  .meta-row b{ color:var(--text); font-weight:500; }
+
+  section{ margin-bottom:64px; scroll-margin-top:70px; }
+  .sec-head{ display:flex; align-items:baseline; gap:12px; margin-bottom:8px; }
+  .sec-num{ font-family:var(--mono); color:var(--teal); font-size:14px; }
+  h2{ font-family:var(--disp); font-weight:600; font-size:23px; margin:0; }
+  .section-sub{ color:var(--muted); font-size:14.5px; margin:8px 0 24px; max-width:680px; }
+
+  code{ font-family:var(--mono); }
+  .card code, p code, li code, td code{
+    background:#0a1520; border:1px solid var(--line); border-radius:5px;
+    padding:1px 6px; font-size:0.9em; color:#bfe8dd;
+  }
+
+  /* context / mechanism cards */
+  .mech-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
+  @media (max-width:800px){ .mech-grid{ grid-template-columns:1fr; } }
+  .mech{
+    background:var(--card); border:1px solid var(--line); border-radius:12px;
+    padding:20px 22px; border-top:3px solid var(--teal);
+  }
+  .mech.pulse{ border-top-color:var(--amber); }
+  .mech.shm{ border-top-color:var(--violet); }
+  .mech .k{ font-family:var(--mono); font-size:12px; text-transform:uppercase; letter-spacing:.07em; margin-bottom:8px; color:var(--teal); }
+  .mech.pulse .k{ color:var(--amber); }
+  .mech.shm .k{ color:var(--violet); }
+  .mech h3{ font-family:var(--disp); font-size:17px; margin:0 0 8px; }
+  .mech p{ margin:0; font-size:13.8px; color:#c3d1dc; }
+  .mech .use{
+    margin-top:12px; font-size:12.5px; color:var(--muted); font-family:var(--mono);
+    border-top:1px dashed var(--line); padding-top:10px;
+  }
+
+  /* requirements table */
+  table.req{ width:100%; border-collapse:collapse; font-size:14px; }
+  table.req th, table.req td{ text-align:left; padding:11px 12px; border-bottom:1px solid var(--line); vertical-align:top; }
+  table.req th{ font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); }
+  table.req tr:last-child td{ border-bottom:none; }
+  .id{ font-family:var(--mono); color:var(--teal); white-space:nowrap; }
+  .tag{
+    display:inline-block; font-family:var(--mono); font-size:10.5px; text-transform:uppercase;
+    letter-spacing:.05em; padding:2px 8px; border-radius:20px; border:1px solid var(--line);
+  }
+  .tag.msg{ color:var(--teal); border-color:var(--teal-dim); }
+  .tag.pulse{ color:var(--amber); border-color:var(--amber-dim); }
+  .tag.shm{ color:var(--violet); border-color:var(--violet-dim); }
+
+  /* architecture diagram */
+  .arch-card{ background:var(--card); border:1px solid var(--line); border-radius:16px; padding:26px; }
+  .arch-svg{ width:100%; height:auto; display:block; }
+
+  /* sequence sim */
+  .sim-card{ background:var(--card); border:1px solid var(--line); border-radius:16px; padding:26px; }
+  .sim-controls{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:24px; }
+  button.ctl{
+    font-family:var(--mono); font-size:13px; background:var(--bg-raise); border:1px solid var(--line);
+    color:var(--text); padding:9px 16px; border-radius:8px; cursor:pointer; transition:border-color .15s;
+  }
+  button.ctl:hover{ border-color:var(--teal); }
+  button.ctl.primary{ background:var(--teal); color:#04211c; border-color:var(--teal); font-weight:600; }
+  button.ctl:disabled{ opacity:.35; cursor:default; }
+  .speed{ margin-left:auto; display:flex; align-items:center; gap:8px; font-family:var(--mono); font-size:12px; color:var(--muted); }
+  .speed input{ accent-color:var(--teal); }
+
+  .lanes{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:0; margin-bottom:10px; }
+  @media (max-width:760px){ .lanes{ grid-template-columns:1fr; gap:14px; } }
+  .lane{ text-align:center; }
+  .lane .box{
+    display:inline-flex; flex-direction:column; align-items:center; gap:6px;
+    padding:14px 18px; border-radius:12px; border:1.5px solid var(--line);
+    background:var(--bg-raise); min-width:140px; transition:border-color .25s, box-shadow .25s;
+  }
+  .lane .box.active{ border-color:var(--teal); box-shadow:0 0 0 5px var(--teal-dim); }
+  .lane .box.shm-active{ border-color:var(--violet); box-shadow:0 0 0 5px var(--violet-dim); }
+  .lane .name{ font-family:var(--disp); font-weight:600; font-size:15px; }
+  .lane .state{
+    font-family:var(--mono); font-size:10.5px; letter-spacing:.03em; color:var(--muted);
+    padding:3px 8px; border-radius:20px; background:#081119; border:1px solid var(--line);
+    min-height:16px;
+  }
+  .lane .state.blocked{ color:var(--amber); border-color:var(--amber-dim); }
+  .lane .state.running{ color:var(--teal); border-color:var(--teal-dim); }
+  .lane .state.shm{ color:var(--violet); border-color:var(--violet-dim); }
+
+  .rails{ position:relative; height:56px; margin-bottom:16px; }
+  .rail-track{ position:absolute; top:50%; height:2px; background:var(--line); transform:translateY(-50%); }
+  .rail-left{ left:4%; width:29%; }
+  .rail-right{ right:4%; width:29%; }
+  .dot{
+    position:absolute; top:50%; width:14px; height:14px; border-radius:50%;
+    background:var(--teal); box-shadow:0 0 12px 2px rgba(63,201,176,.55);
+    transform:translate(-50%,-50%); opacity:0; transition:left var(--dur,.9s) linear, opacity .15s;
+  }
+  .dot.pulse{ background:var(--amber); box-shadow:0 0 12px 2px rgba(230,169,79,.55); }
+  .dot.shm{ background:var(--violet); box-shadow:0 0 12px 2px rgba(154,140,242,.55); width:20px; height:20px; border-radius:5px; }
+  .dot .lbl{ position:absolute; top:-21px; left:50%; transform:translateX(-50%); font-family:var(--mono); font-size:9.5px; white-space:nowrap; color:var(--text); }
+
+  .step-caption{
+    font-family:var(--mono); font-size:12.5px; color:var(--muted);
+    min-height:34px; padding:10px 14px; background:#081119; border:1px solid var(--line); border-radius:8px;
+  }
+  .step-caption b{ color:var(--text); font-weight:500; }
+
+  /* memory layout */
+  .layout-card{ background:var(--card); border:1px solid var(--line); border-radius:16px; padding:26px; }
+  .mem-row{ display:flex; border:1px solid var(--line); border-radius:10px; overflow:hidden; margin-bottom:14px; font-family:var(--mono); font-size:12px; }
+  .mem-cell{ padding:14px 10px; text-align:center; border-right:1px solid var(--line); flex:1; }
+  .mem-cell:last-child{ border-right:none; }
+  .mem-cell .t{ color:var(--muted); font-size:10px; text-transform:uppercase; letter-spacing:.05em; margin-bottom:5px; }
+  .mem-cell .v{ color:var(--text); }
+  .mem-cell.hdr{ background:#12283a; flex:0 0 130px; }
+  .mem-cell.buf0{ background:rgba(154,140,242,.08); }
+  .mem-cell.buf1{ background:rgba(63,201,176,.06); }
+
+  footer{ color:var(--muted); font-size:12.5px; font-family:var(--mono); border-top:1px solid var(--line); padding-top:20px; margin-top:10px; }
+</style>
+</head>
+<body>
+
+<nav class="toc">
+  <div class="toc-inner">
+    <span class="doc-id">SPEC · QNX-HYBRID-IPC-01</span>
+    <a href="#context">Context</a>
+    <a href="#mechanisms">Mechanisms</a>
+    <a href="#requirements">Requirements</a>
+    <a href="#architecture">Architecture</a>
+    <a href="#sequence">Sequence</a>
+    <a href="#layout">Memory layout</a>
+    <a href="#nfr">Non-functional</a>
+  </div>
+</nav>
+
+<div class="wrap">
+
+  <header>
+    <div class="eyebrow">Requirements Specification</div>
+    <h1>A hybrid QNX IPC system:<br><em>message</em> + <em>pulse</em> + <em>shared memory</em></h1>
+    <p class="lede">
+      Defines a producer/consumer frame-transfer service in which control negotiation
+      uses synchronous native messages, event notification uses pulses, and bulk data
+      moves through zero-copy POSIX shared memory — each mechanism doing only the job
+      it's suited for.
+    </p>
+    <div class="meta-row">
+      <div>Doc ID: <b>QNX-HYBRID-IPC-01</b></div>
+      <div>Status: <b>Draft for review</b></div>
+      <div>Target: <b>QNX Neutrino, SMP</b></div>
+      <div>Owners: <b>Producer (data source), Consumer (supervisor)</b></div>
+    </div>
+  </header>
+
+  <section id="context">
+    <div class="sec-head"><span class="sec-num">1.</span><h2>Context &amp; problem statement</h2></div>
+    <p class="section-sub">
+      A producer process generates fixed-size data frames (e.g. sensor/camera frames, log batches)
+      at a steady rate and must hand them to a consumer process for further work. Two naive designs
+      fail: routing every frame through a synchronous <code>MsgSend()</code> forces a full kernel copy
+      per frame and stalls the producer until the consumer replies; routing everything through pulses
+      alone is unsafe, since a pulse cannot carry a variable-size payload. The system therefore needs
+      <b>all three</b> mechanisms, each scoped to what it does well.
+    </p>
+  </section>
+
+  <section id="mechanisms">
+    <div class="sec-head"><span class="sec-num">2.</span><h2>Mechanism responsibilities</h2></div>
+    <p class="section-sub">Each IPC primitive is assigned exactly one job in this system — no overlap, no redundancy.</p>
+    <div class="mech-grid">
+      <div class="mech msg">
+        <div class="k">Native message</div>
+        <h3>Connection setup &amp; control</h3>
+        <p>One-time, blocking <code>MsgSend()/MsgReceive()/MsgReply()</code> rendezvous used to negotiate the shared memory region: object name, size, and buffer count. Also used for orderly shutdown requests.</p>
+        <div class="use">Used at: session start, session end</div>
+      </div>
+      <div class="mech pulse">
+        <div class="k">Pulse</div>
+        <h3>Asynchronous event signaling</h3>
+        <p>Fixed-size, non-blocking notifications: <code>FRAME_READY</code> from producer to consumer when a buffer is filled, <code>BUFFER_FREE</code> from consumer back to producer when it's safe to reuse a slot.</p>
+        <div class="use">Used at: every frame, steady-state loop</div>
+      </div>
+      <div class="mech shm">
+        <div class="k">Shared memory</div>
+        <h3>Bulk zero-copy data plane</h3>
+        <p><code>shm_open()</code> + <code>mmap()</code> region holding a double-buffered ring of frame slots. The actual frame bytes never pass through the kernel's message-copy path.</p>
+        <div class="use">Used at: every frame, steady-state loop</div>
+      </div>
+    </div>
+  </section>
+
+  <section id="requirements">
+    <div class="sec-head"><span class="sec-num">3.</span><h2>Functional requirements</h2></div>
+    <p class="section-sub">Each requirement is tagged with the IPC mechanism it governs.</p>
+    <table class="req">
+      <tr><th>ID</th><th>Requirement</th><th>Mechanism</th></tr>
+      <tr>
+        <td class="id">FR-01</td>
+        <td>The Consumer <b>shall</b> create a named channel via <code>name_attach()</code> before accepting any connection, and block on <code>MsgReceive()</code> until a request arrives.</td>
+        <td><span class="tag msg">message</span></td>
+      </tr>
+      <tr>
+        <td class="id">FR-02</td>
+        <td>The Producer <b>shall</b> connect via <code>name_open()</code> and issue exactly one synchronous <code>MsgSend()</code> control request before any data transfer, specifying requested frame size and buffer count.</td>
+        <td><span class="tag msg">message</span></td>
+      </tr>
+      <tr>
+        <td class="id">FR-03</td>
+        <td>The Consumer <b>shall</b> allocate the shared memory object (<code>shm_open()</code> + <code>ftruncate()</code>) sized to hold <code>N</code> double-buffered frame slots, and return the object name, size, and slot layout to the Producer in its <code>MsgReply()</code>.</td>
+        <td><span class="tag msg">message</span> <span class="tag shm">shm</span></td>
+      </tr>
+      <tr>
+        <td class="id">FR-04</td>
+        <td>The Producer <b>shall</b> <code>mmap()</code> the shared memory object using the name and size received in FR-03 before writing any frame data.</td>
+        <td><span class="tag shm">shm</span></td>
+      </tr>
+      <tr>
+        <td class="id">FR-05</td>
+        <td>The Producer <b>shall</b> write each frame directly into the next free slot in the shared region and <b>shall not</b> copy frame data through any message primitive.</td>
+        <td><span class="tag shm">shm</span></td>
+      </tr>
+      <tr>
+        <td class="id">FR-06</td>
+        <td>After a frame write completes, the Producer <b>shall</b> notify the Consumer with <code>MsgSendPulse(FRAME_READY, slot_index)</code> and <b>shall not</b> block waiting for acknowledgement.</td>
+        <td><span class="tag pulse">pulse</span></td>
+      </tr>
+      <tr>
+        <td class="id">FR-07</td>
+        <td>The Consumer <b>shall</b> distinguish pulses from blocking requests on the same channel using <code>rcvid == 0</code>, and dispatch on <code>msg.pulse.code</code>.</td>
+        <td><span class="tag pulse">pulse</span></td>
+      </tr>
+      <tr>
+        <td class="id">FR-08</td>
+        <td>On receiving <code>FRAME_READY</code>, the Consumer <b>shall</b> read the indicated slot directly from the shared region and <b>shall not</b> request the data via a separate message.</td>
+        <td><span class="tag shm">shm</span></td>
+      </tr>
+      <tr>
+        <td class="id">FR-09</td>
+        <td>After consuming a slot, the Consumer <b>shall</b> notify the Producer with <code>MsgSendPulse(BUFFER_FREE, slot_index)</code> so the slot may be reused, enabling double-buffered pipelining.</td>
+        <td><span class="tag pulse">pulse</span></td>
+      </tr>
+      <tr>
+        <td class="id">FR-10</td>
+        <td>The Producer <b>shall not</b> write into a slot until it has received a corresponding <code>BUFFER_FREE</code> pulse for that slot (or it is the slot's first use).</td>
+        <td><span class="tag pulse">pulse</span> <span class="tag shm">shm</span></td>
+      </tr>
+      <tr>
+        <td class="id">FR-11</td>
+        <td>Session shutdown <b>shall</b> use a final pulse (<code>SESSION_DONE</code>) followed by the Consumer unmapping and <code>shm_unlink()</code>-ing the region, then <code>name_detach()</code>.</td>
+        <td><span class="tag pulse">pulse</span> <span class="tag shm">shm</span></td>
+      </tr>
+      <tr>
+        <td class="id">FR-12</td>
+        <td>The Consumer <b>shall</b> handle <code>_PULSE_CODE_DISCONNECT</code> by calling <code>ConnectDetach()</code> to release kernel resources if the Producer terminates unexpectedly mid-session.</td>
+        <td><span class="tag pulse">pulse</span></td>
+      </tr>
+    </table>
+  </section>
+
+  <section id="architecture">
+    <div class="sec-head"><span class="sec-num">4.</span><h2>Architecture overview</h2></div>
+    <p class="section-sub">Control and event paths run through the kernel's message-passing subsystem; the data path runs directly between the two processes' mapped address spaces.</p>
+    <div class="arch-card">
+      <svg class="arch-svg" viewBox="0 0 980 360" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <marker id="arrowTeal" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#3fc9b0"/></marker>
+          <marker id="arrowAmber" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#e6a94f"/></marker>
+          <marker id="arrowViolet" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#9a8cf2"/></marker>
+        </defs>
+        <!-- Producer -->
+        <rect x="30" y="40" width="200" height="90" rx="12" fill="#0f1c29" stroke="#1e3346"/>
+        <text x="130" y="78" text-anchor="middle" fill="#e7eef4" font-family="Space Grotesk" font-weight="600" font-size="17">Producer</text>
+        <text x="130" y="100" text-anchor="middle" fill="#7f95a8" font-family="IBM Plex Mono" font-size="11">frame source process</text>
+
+        <!-- Consumer -->
+        <rect x="750" y="40" width="200" height="90" rx="12" fill="#0f1c29" stroke="#1e3346"/>
+        <text x="850" y="78" text-anchor="middle" fill="#e7eef4" font-family="Space Grotesk" font-weight="600" font-size="17">Consumer</text>
+        <text x="850" y="100" text-anchor="middle" fill="#7f95a8" font-family="IBM Plex Mono" font-size="11">supervisor process</text>
+
+        <!-- QNX kernel IPC band -->
+        <rect x="270" y="20" width="440" height="130" rx="12" fill="#0a1520" stroke="#1e3346" stroke-dasharray="4 3"/>
+        <text x="490" y="42" text-anchor="middle" fill="#7f95a8" font-family="IBM Plex Mono" font-size="10.5">QNX MICROKERNEL — IPC PATH</text>
+        <text x="490" y="80" text-anchor="middle" fill="#3fc9b0" font-family="IBM Plex Mono" font-size="12.5">MsgSend / MsgReceive / MsgReply</text>
+        <text x="490" y="102" text-anchor="middle" fill="#7f95a8" font-family="IBM Plex Mono" font-size="10.5">(control: setup + teardown)</text>
+        <text x="490" y="126" text-anchor="middle" fill="#e6a94f" font-family="IBM Plex Mono" font-size="12.5">MsgSendPulse — FRAME_READY / BUFFER_FREE</text>
+
+        <line x1="230" y1="70" x2="270" y2="70" stroke="#3fc9b0" stroke-width="2" marker-end="url(#arrowTeal)"/>
+        <line x1="710" y1="70" x2="750" y2="70" stroke="#3fc9b0" stroke-width="2" marker-end="url(#arrowTeal)"/>
+        <line x1="230" y1="112" x2="270" y2="112" stroke="#e6a94f" stroke-width="2" marker-end="url(#arrowAmber)"/>
+        <line x1="710" y1="112" x2="750" y2="112" stroke="#e6a94f" stroke-width="2" marker-end="url(#arrowAmber)"/>
+
+        <!-- Shared memory region -->
+        <rect x="270" y="220" width="440" height="110" rx="12" fill="#151130" stroke="#332e5c"/>
+        <text x="490" y="244" text-anchor="middle" fill="#9a8cf2" font-family="IBM Plex Mono" font-size="10.5">POSIX SHARED MEMORY — /frame_pool</text>
+        <rect x="300" y="260" width="180" height="50" rx="8" fill="rgba(154,140,242,0.12)" stroke="#332e5c"/>
+        <text x="390" y="290" text-anchor="middle" fill="#e7eef4" font-family="IBM Plex Mono" font-size="12">slot 0</text>
+        <rect x="500" y="260" width="180" height="50" rx="8" fill="rgba(154,140,242,0.12)" stroke="#332e5c"/>
+        <text x="590" y="290" text-anchor="middle" fill="#e7eef4" font-family="IBM Plex Mono" font-size="12">slot 1</text>
+
+        <line x1="130" y1="130" x2="390" y2="260" stroke="#9a8cf2" stroke-width="2" marker-end="url(#arrowViolet)"/>
+        <line x1="850" y1="130" x2="590" y2="260" stroke="#9a8cf2" stroke-width="2" marker-end="url(#arrowViolet)"/>
+        <text x="200" y="205" fill="#9a8cf2" font-family="IBM Plex Mono" font-size="10.5">mmap() write (zero-copy)</text>
+        <text x="700" y="205" fill="#9a8cf2" font-family="IBM Plex Mono" font-size="10.5" text-anchor="end">mmap() read (zero-copy)</text>
+      </svg>
+    </div>
+  </section>
+
+  <section id="sequence">
+    <div class="sec-head"><span class="sec-num">5.</span><h2>Operational sequence</h2></div>
+    <p class="section-sub">Step through the full session: one-time setup over a native message, then the steady-state pulse + shared-memory loop, then teardown.</p>
+
+    <div class="sim-card">
+      <div class="sim-controls">
+        <button class="ctl primary" id="playBtn">▶ Run sequence</button>
+        <button class="ctl" id="stepBtn">Step once</button>
+        <button class="ctl" id="resetBtn">Reset</button>
+        <div class="speed"><span>speed</span><input type="range" id="speedSlider" min="1" max="3" value="2" step="1"></div>
+      </div>
+
+      <div class="lanes">
+        <div class="lane">
+          <div class="box" id="prodBox"><div class="name">Producer</div><div class="state" id="prodState">idle</div></div>
+        </div>
+        <div class="lane">
+          <div class="box" id="shmBox"><div class="name">Shared Memory</div><div class="state" id="shmState">unmapped</div></div>
+        </div>
+        <div class="lane">
+          <div class="box" id="consBox"><div class="name">Consumer</div><div class="state" id="consState">idle</div></div>
+        </div>
+      </div>
+
+      <div class="rails">
+        <div class="rail-track rail-left"></div>
+        <div class="rail-track rail-right"></div>
+        <div class="dot" id="dotLeft"><span class="lbl" id="dotLeftLbl"></span></div>
+        <div class="dot" id="dotRight"><span class="lbl" id="dotRightLbl"></span></div>
+      </div>
+
+      <div class="step-caption" id="caption">Press <b>Run sequence</b> to begin.</div>
+    </div>
+  </section>
+
+  <section id="layout">
+    <div class="sec-head"><span class="sec-num">6.</span><h2>Shared memory layout</h2></div>
+    <p class="section-sub">Fixed layout agreed during the FR-03 control exchange — both processes compute identical offsets from the same header, so no pointers are ever shared, only the object name and size.</p>
+    <div class="layout-card">
+      <div class="mem-row">
+        <div class="mem-cell hdr"><div class="t">Region</div><div class="v">Header</div></div>
+        <div class="mem-cell"><div class="t">Field</div><div class="v">frame_size</div></div>
+        <div class="mem-cell"><div class="t">Field</div><div class="v">slot_count</div></div>
+        <div class="mem-cell"><div class="t">Field</div><div class="v">seq_no [2]</div></div>
+        <div class="mem-cell"><div class="t">Field</div><div class="v">reserved</div></div>
+      </div>
+      <div class="mem-row">
+        <div class="mem-cell hdr"><div class="t">Region</div><div class="v">Slot 0</div></div>
+        <div class="mem-cell buf0" style="flex:4"><div class="t">Payload</div><div class="v">frame bytes[frame_size]</div></div>
+      </div>
+      <div class="mem-row">
+        <div class="mem-cell hdr"><div class="t">Region</div><div class="v">Slot 1</div></div>
+        <div class="mem-cell buf1" style="flex:4"><div class="t">Payload</div><div class="v">frame bytes[frame_size]</div></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="nfr">
+    <div class="sec-head"><span class="sec-num">7.</span><h2>Non-functional requirements</h2></div>
+    <table class="req">
+      <tr><th>ID</th><th>Requirement</th></tr>
+      <tr><td class="id">NFR-01</td><td>Steady-state frame handoff <b>shall not</b> invoke any kernel message copy larger than the fixed pulse payload (5 bytes) — bulk data movement cost <b>shall</b> be limited to the producer's write and consumer's read of shared memory.</td></tr>
+      <tr><td class="id">NFR-02</td><td>The double-buffer handshake (FR-10) <b>shall</b> be the sole mutual-exclusion mechanism for slot access; no additional lock/semaphore is required as long as strict alternation is enforced.</td></tr>
+      <tr><td class="id">NFR-03</td><td>Control setup (FR-01–FR-03) <b>shall</b> complete once per session and <b>shall not</b> reoccur in the per-frame steady-state path.</td></tr>
+      <tr><td class="id">NFR-04</td><td>The system <b>shall</b> remain correct if the Producer disconnects mid-session (FR-12); the Consumer <b>shall not</b> deadlock waiting on a pulse that will never arrive.</td></tr>
+      <tr><td class="id">NFR-05</td><td>All pulse codes <b>shall</b> be defined above the reserved system range to avoid collision with <code>_PULSE_CODE_DISCONNECT</code> / <code>_PULSE_CODE_UNBLOCK</code>.</td></tr>
+    </table>
+  </section>
+
+  <footer>
+    QNX-HYBRID-IPC-01 · draft · mechanisms scoped per requirement: message = control, pulse = event, shared memory = data.
+  </footer>
+</div>
+
+<script>
+(function(){
+  const prodState=document.getElementById('prodState'), shmState=document.getElementById('shmState'), consState=document.getElementById('consState');
+  const prodBox=document.getElementById('prodBox'), shmBox=document.getElementById('shmBox'), consBox=document.getElementById('consBox');
+  const dotL=document.getElementById('dotLeft'), dotLLbl=document.getElementById('dotLeftLbl');
+  const dotR=document.getElementById('dotRight'), dotRLbl=document.getElementById('dotRightLbl');
+  const caption=document.getElementById('caption');
+  const playBtn=document.getElementById('playBtn'), stepBtn=document.getElementById('stepBtn'), resetBtn=document.getElementById('resetBtn');
+  const speedSlider=document.getElementById('speedSlider');
+
+  function speedMs(){ const v=parseInt(speedSlider.value,10); return v===1?1500:v===2?850:420; }
+  function setState(el,text,kind){ el.textContent=text; el.className='state'+(kind?' '+kind:''); }
+  function setActive(box,on,cls){ box.classList.remove('active','shm-active'); if(on) box.classList.add(cls||'active'); }
+  function setCaption(html){ caption.innerHTML=html; }
+
+  // dotL travels producer->shm (left rail), dotR travels shm->consumer (right rail)
+  // rail-left spans 4% to 33%, rail-right spans 67% to 96% roughly matching CSS
+  function fireDot(dot,lbl,label,fromPct,toPct,cls,cb){
+    dot.className='dot'+(cls?(' '+cls):'');
+    lbl.textContent=label;
+    dot.style.setProperty('--dur',(speedMs()*0.55)+'ms');
+    dot.style.left=fromPct+'%'; dot.style.opacity='0';
+    void dot.offsetWidth;
+    requestAnimationFrame(()=>{
+      dot.style.opacity='1';
+      dot.style.left=toPct+'%';
+      setTimeout(()=>{ dot.style.opacity='0'; if(cb) cb(); }, speedMs()*0.55);
+    });
+  }
+
+  let steps=[], idx=0, playing=false, timer=null;
+
+  function buildSteps(){
+    steps=[];
+    // Setup phase
+    steps.push(()=>{
+      setState(consState,'name_attach()','running'); setActive(consBox,true);
+      setCaption('<b>FR-01</b> — Consumer creates named channel and blocks on MsgReceive().');
+    });
+    steps.push(()=>{
+      setState(consState,'MsgReceive() blocked','blocked'); setActive(consBox,false);
+    });
+    steps.push(()=>{
+      setState(prodState,'name_open() + MsgSend()','running'); setActive(prodBox,true);
+      setCaption('<b>FR-02</b> — Producer opens connection and sends one synchronous control request (frame size, buffer count).');
+    });
+    steps.push(()=>{
+      setState(consState,'allocating shm_open()+ftruncate()','running'); setActive(consBox,true);
+      setState(shmState,'creating region','shm'); setActive(shmBox,true,'shm-active');
+      setCaption('<b>FR-03</b> — Consumer allocates the shared memory object sized for N double-buffered slots.');
+    });
+    steps.push(()=>{
+      setState(consState,'MsgReply(name,size,layout)','running');
+      setCaption('<b>FR-03</b> — Consumer replies with the shm object name, size, and slot layout.');
+    });
+    steps.push(()=>{
+      setState(prodState,'mmap(shm)','running');
+      setState(shmState,'mapped by both','shm');
+      setCaption('<b>FR-04</b> — Producer maps the same shared memory object using the info just received.');
+    });
+
+    // Steady state loop x2 frames
+    for(let i=0;i<2;i++){
+      steps.push(()=>{
+        setState(prodState,`writing frame ${i} → slot ${i%2}`,'running'); setActive(prodBox,true);
+        setState(shmState,`slot ${i%2}: writing`,'shm'); setActive(shmBox,true,'shm-active');
+        setCaption(`<b>FR-05</b> — Producer writes frame ${i} directly into slot ${i%2} of shared memory. No message copy involved.`);
+      });
+      steps.push(()=>{
+        setState(prodState,'MsgSendPulse(FRAME_READY)','running');
+        setCaption(`<b>FR-06</b> — Producer fires FRAME_READY(slot=${i%2}) and returns immediately — does not block.`);
+        fireDot(dotL,dotLLbl,`FRAME_READY slot=${i%2}`,4,33,'pulse',()=>{
+          setState(consState,'handling FRAME_READY','running'); setActive(consBox,true);
+        });
+      });
+      steps.push(()=>{
+        setState(consState,`reading slot ${i%2} from shm`,'running');
+        setState(shmState,`slot ${i%2}: reading`,'shm');
+        setCaption(`<b>FR-08</b> — Consumer reads slot ${i%2} directly from the mapped region — no request message needed.`);
+      });
+      steps.push(()=>{
+        setState(consState,'MsgSendPulse(BUFFER_FREE)','running');
+        setCaption(`<b>FR-09</b> — Consumer fires BUFFER_FREE(slot=${i%2}) once done, permitting reuse of that slot.`);
+        fireDot(dotR,dotRLbl,`BUFFER_FREE slot=${i%2}`,96,67,'pulse',()=>{
+          setState(prodState,'slot free — may write again','running'); setActive(prodBox,true);
+        });
+      });
+      steps.push(()=>{
+        setState(consState,'MsgReceive() blocked','blocked'); setActive(consBox,false);
+        setState(shmState,'idle','shm'); setActive(shmBox,false);
+      });
+    }
+
+    // Teardown
+    steps.push(()=>{
+      setState(prodState,'MsgSendPulse(SESSION_DONE)','running');
+      setCaption('<b>FR-11</b> — Producer signals SESSION_DONE to close out the exchange.');
+      fireDot(dotL,dotLLbl,'SESSION_DONE',4,33,'pulse',()=>{
+        setState(consState,'handling SESSION_DONE','running'); setActive(consBox,true);
+      });
+    });
+    steps.push(()=>{
+      setState(consState,'munmap + shm_unlink + name_detach','running');
+      setState(shmState,'unlinked','shm');
+      setCaption('<b>FR-11</b> — Consumer unmaps and unlinks the shared memory object, then detaches the channel.');
+    });
+    steps.push(()=>{
+      setState(prodState,'exit(0)',null); setActive(prodBox,false);
+      setState(consState,'exit(0)',null); setActive(consBox,false);
+      setState(shmState,'released',null); setActive(shmBox,false);
+      setCaption('Session complete. Setup used one message exchange; steady state used pulses + shared memory only.');
+      playBtn.disabled=true; stepBtn.disabled=true;
+    });
+  }
+
+  function resetSim(){
+    playing=false; clearTimeout(timer); idx=0; buildSteps();
+    setState(prodState,'idle',null); setState(shmState,'unmapped',null); setState(consState,'idle',null);
+    setActive(prodBox,false); setActive(consBox,false); setActive(shmBox,false);
+    dotL.style.opacity='0'; dotR.style.opacity='0';
+    setCaption('Press <b>Run sequence</b> to begin.');
+    playBtn.disabled=false; stepBtn.disabled=false; playBtn.textContent='▶ Run sequence';
+  }
+  function doStep(){ if(idx>=steps.length) return false; steps[idx](); idx++; return idx<steps.length; }
+  function playLoop(){ if(!playing) return; const more=doStep(); if(!more){ playing=false; playBtn.textContent='▶ Run sequence'; return; } timer=setTimeout(playLoop,speedMs()); }
+
+  playBtn.addEventListener('click',()=>{
+    if(idx>=steps.length){ resetSim(); }
+    playing=!playing; playBtn.textContent=playing?'⏸ Pause':'▶ Resume';
+    if(playing) playLoop(); else clearTimeout(timer);
+  });
+  stepBtn.addEventListener('click',()=>{
+    playing=false; clearTimeout(timer); playBtn.textContent='▶ Run sequence';
+    if(idx>=steps.length) resetSim();
+    doStep();
+  });
+  resetBtn.addEventListener('click',resetSim);
+
+  resetSim();
+})();
+</script>
+</body>
+</html>

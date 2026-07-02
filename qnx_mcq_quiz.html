@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>QNX Concepts Quiz</title>
+<style>
+  :root{
+    --navy-950:#0a1220;
+    --navy-900:#0f1b2e;
+    --navy-800:#152943;
+    --navy-700:#1c3455;
+    --teal-400:#2dd4bf;
+    --teal-300:#5eead4;
+    --teal-glow:rgba(45,212,191,0.18);
+    --amber-400:#f59e0b;
+    --red-400:#f87171;
+    --green-400:#4ade80;
+    --text-hi:#eaf2f5;
+    --text-mid:#9fb3c8;
+    --text-lo:#6b7f96;
+    --mono: 'JetBrains Mono','SFMono-Regular',Consolas,monospace;
+    --sans: 'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:
+      radial-gradient(circle at 15% 0%, var(--teal-glow) 0%, transparent 45%),
+      linear-gradient(180deg, var(--navy-950) 0%, #081019 100%);
+    color:var(--text-hi);
+    font-family:var(--sans);
+    padding:40px 20px 80px;
+    min-height:100vh;
+  }
+  .wrap{max-width:760px;margin:0 auto;}
+  header{margin-bottom:36px;}
+  .eyebrow{
+    font-family:var(--mono);
+    font-size:12px;
+    letter-spacing:2.5px;
+    color:var(--teal-400);
+    text-transform:uppercase;
+    margin-bottom:10px;
+  }
+  h1{
+    font-size:28px;
+    margin:0 0 8px;
+    font-weight:700;
+    letter-spacing:-0.02em;
+  }
+  .sub{color:var(--text-mid);font-size:14.5px;line-height:1.5;margin:0;}
+  .progress-row{
+    display:flex;
+    align-items:center;
+    gap:14px;
+    margin-top:26px;
+  }
+  .progress-track{
+    flex:1;
+    height:4px;
+    background:var(--navy-800);
+    border-radius:4px;
+    overflow:hidden;
+  }
+  .progress-fill{
+    height:100%;
+    background:linear-gradient(90deg,var(--teal-400),var(--teal-300));
+    width:0%;
+    transition:width .35s ease;
+  }
+  #score{
+    font-family:var(--mono);
+    font-size:13px;
+    color:var(--text-mid);
+    white-space:nowrap;
+  }
+  .card{
+    background:linear-gradient(180deg,var(--navy-900),var(--navy-950));
+    border:1px solid var(--navy-700);
+    border-radius:14px;
+    padding:26px 26px 22px;
+    margin-bottom:20px;
+    position:relative;
+    overflow:hidden;
+  }
+  .card::before{
+    content:'';
+    position:absolute;
+    top:0;left:0;
+    width:3px;height:100%;
+    background:var(--navy-700);
+    transition:background .3s ease;
+  }
+  .card.answered::before{background:var(--teal-400);}
+  .qmeta{
+    display:flex;
+    justify-content:space-between;
+    align-items:baseline;
+    margin-bottom:14px;
+  }
+  .qnum{
+    font-family:var(--mono);
+    font-size:12px;
+    color:var(--teal-400);
+    letter-spacing:1px;
+  }
+  .topic-tag{
+    font-family:var(--mono);
+    font-size:10.5px;
+    color:var(--text-lo);
+    letter-spacing:0.5px;
+    text-transform:uppercase;
+    border:1px solid var(--navy-700);
+    padding:3px 8px;
+    border-radius:20px;
+  }
+  .qtext{
+    font-size:16.5px;
+    line-height:1.5;
+    font-weight:600;
+    margin:0 0 18px;
+    color:var(--text-hi);
+  }
+  .options{display:flex;flex-direction:column;gap:9px;}
+  .opt{
+    display:flex;
+    align-items:center;
+    gap:12px;
+    width:100%;
+    text-align:left;
+    background:var(--navy-800);
+    border:1px solid var(--navy-700);
+    color:var(--text-hi);
+    font-family:var(--sans);
+    font-size:14px;
+    line-height:1.4;
+    padding:12px 14px;
+    border-radius:9px;
+    cursor:pointer;
+    transition:border-color .15s ease, background .15s ease, transform .1s ease;
+  }
+  .opt:hover:not(:disabled){
+    border-color:var(--teal-400);
+    background:var(--navy-700);
+  }
+  .opt:active:not(:disabled){transform:scale(0.995);}
+  .opt:disabled{cursor:default;}
+  .letter{
+    font-family:var(--mono);
+    font-size:12px;
+    color:var(--text-lo);
+    width:20px;
+    height:20px;
+    flex:0 0 20px;
+    border:1px solid var(--navy-700);
+    border-radius:5px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }
+  .opt.correct{
+    background:rgba(74,222,128,0.10);
+    border-color:var(--green-400);
+  }
+  .opt.correct .letter{border-color:var(--green-400);color:var(--green-400);}
+  .opt.incorrect{
+    background:rgba(248,113,113,0.09);
+    border-color:var(--red-400);
+  }
+  .opt.incorrect .letter{border-color:var(--red-400);color:var(--red-400);}
+  .opt.dim{opacity:0.45;}
+  .mark{
+    margin-left:auto;
+    font-family:var(--mono);
+    font-size:13px;
+    flex:0 0 auto;
+  }
+  .mark.c{color:var(--green-400);}
+  .mark.x{color:var(--red-400);}
+  .explain{
+    display:none;
+    margin-top:14px;
+    padding:13px 14px;
+    background:var(--navy-950);
+    border:1px solid var(--navy-700);
+    border-left:3px solid var(--teal-400);
+    border-radius:8px;
+    font-size:13.5px;
+    line-height:1.55;
+    color:var(--text-mid);
+  }
+  .explain.show{display:block;}
+  .explain b{color:var(--teal-300);font-weight:600;}
+  footer{
+    text-align:center;
+    margin-top:30px;
+    color:var(--text-lo);
+    font-size:12.5px;
+    font-family:var(--mono);
+  }
+  #reset-btn{
+    display:none;
+    margin:26px auto 0;
+    background:transparent;
+    border:1px solid var(--teal-400);
+    color:var(--teal-300);
+    font-family:var(--mono);
+    font-size:12.5px;
+    letter-spacing:1px;
+    padding:10px 22px;
+    border-radius:8px;
+    cursor:pointer;
+    text-transform:uppercase;
+  }
+  #reset-btn:hover{background:var(--teal-glow);}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Intermediate &middot; Self-check</div>
+    <h1>QNX Concepts Quiz</h1>
+    <p class="sub">Architecture, scheduling, resource managers, POSIX process/thread model, and multithreading pitfalls. Tap an option to check your answer.</p>
+    <div class="progress-row">
+      <div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div>
+      <div id="score">0 / 10 answered</div>
+    </div>
+  </header>
+
+  <div id="quiz"></div>
+  <button id="reset-btn">Reset quiz</button>
+  <footer>QNX Neutrino &middot; Architecture &amp; POSIX Threading</footer>
+</div>
+
+<script>
+const QUESTIONS = [
+  {
+    topic: "Architecture",
+    q: "QNX Neutrino is described as a microkernel OS. What actually runs inside the kernel itself?",
+    options: [
+      "Only scheduling, IPC message passing, and interrupt handling",
+      "Scheduling, IPC, interrupt handling, and all device drivers",
+      "Scheduling, IPC, filesystems, and the network stack",
+      "Scheduling, IPC, and the process manager's full POSIX layer"
+    ],
+    correct: 0,
+    explain: "The Neutrino kernel is deliberately minimal — it handles scheduling, message-passing IPC, and interrupt/signal handling. Everything else (drivers, filesystems, network stack, process manager services) runs as separate user-space processes, most of them implemented as resource managers."
+  },
+  {
+    topic: "Scheduling",
+    q: "By default, how does QNX schedule two ready threads that share the exact same priority?",
+    options: [
+      "It picks one at random on each scheduling decision",
+      "Round-robin time-slicing between them at that priority level",
+      "Alphabetical order of the thread name",
+      "The thread with the lower TID always runs first"
+    ],
+    correct: 1,
+    explain: "QNX's default SCHED_RR policy time-slices between threads of equal priority, giving each a quantum before moving to the back of that priority's ready queue. SCHED_FIFO, by contrast, would let one thread run until it blocks or yields."
+  },
+  {
+    topic: "Process Manager",
+    q: "What is the primary role of QNX's process manager (procnto)?",
+    options: [
+      "It only renders the console shell prompt at boot",
+      "It manages process/thread creation, memory mapping, and pathname space",
+      "It exclusively handles TCP/IP socket routing",
+      "It only stores user account passwords"
+    ],
+    correct: 1,
+    explain: "procnto combines the microkernel and process manager into a single binary. It's responsible for process and thread lifecycle, virtual memory management, and maintaining the pathname (namespace) that resource managers register into."
+  },
+  {
+    topic: "Resource Manager",
+    q: "What does a QNX resource manager fundamentally do?",
+    options: [
+      "It registers a pathname and handles messages sent to that path",
+      "It only compiles kernel modules at boot time",
+      "It replaces the mutex implementation for all threads",
+      "It stores static configuration files in /etc permanently"
+    ],
+    correct: 0,
+    explain: "A resource manager is a user-space process that attaches to a pathname (e.g. /dev/ser1) and services standard calls like open(), read(), write(), and devctl() sent to it as messages. This is how QNX exposes both real hardware and virtual devices without putting driver code in the kernel."
+  },
+  {
+    topic: "System Libraries",
+    q: "In QNX, what is the purpose of shared objects (.so files) at runtime?",
+    options: [
+      "They let multiple processes reuse one loaded copy of library code",
+      "They force every process to duplicate library code in its own image",
+      "They exist only for storing kernel boot parameters",
+      "They replace the need for a process manager entirely"
+    ],
+    correct: 0,
+    explain: "Shared objects (.so) let common library code, such as libc, be loaded into memory once and mapped into multiple process address spaces, reducing memory footprint and image size — important for resource-constrained embedded targets."
+  },
+  {
+    topic: "OS Services",
+    q: "Which mechanism underlies most inter-process communication for OS services in QNX?",
+    options: [
+      "Synchronous message passing (send/receive/reply)",
+      "Shared global variables with no locking",
+      "Polling a status file every few milliseconds",
+      "Direct function calls across process boundaries"
+    ],
+    correct: 0,
+    explain: "QNX's native IPC model is synchronous message passing: a client sends a message and blocks until the server replies. Nearly all OS services, including resource managers, are built on this send/receive/reply pattern, with pulses used for asynchronous notification."
+  },
+  {
+    topic: "Boot Sequence",
+    q: "In a typical QNX boot sequence, what is the correct high-level order of stages?",
+    options: [
+      "Shell login, IPL, kernel startup, procnto, application launch",
+      "IPL, startup program, kernel/procnto initialization, then system processes",
+      "Application launch, procnto, IPL, then kernel initialization",
+      "procnto, IPL, application launch, then kernel initialization"
+    ],
+    correct: 1,
+    explain: "Boot begins with the Initial Program Loader (IPL) bringing hardware to a known state, followed by a startup program that initializes the syspage and hands off to the kernel/procnto, which then starts other system processes (drivers, resource managers) defined in the buildfile."
+  },
+  {
+    topic: "Shell / POSIX",
+    q: "Which shell is the default command-line shell used on QNX Neutrino targets?",
+    options: [
+      "bash, identical to most desktop Linux distributions",
+      "ksh (Korn shell), with UNIX-like syntax and utilities",
+      "PowerShell, ported specifically for embedded targets",
+      "A proprietary shell with no relation to POSIX syntax"
+    ],
+    correct: 1,
+    explain: "QNX Neutrino ships ksh as its default shell, supporting familiar POSIX-style scripting, pipes, redirection, and common utilities like grep, find, and awk, matching the general UNIX command-line experience developers already know."
+  },
+  {
+    topic: "Process & Threads",
+    q: "What is the key difference between a QNX/POSIX process and a thread within that process?",
+    options: [
+      "Threads within a process share its address space; processes don't",
+      "Each thread gets its own independent virtual address space",
+      "Processes always share memory directly with sibling processes",
+      "There is no meaningful difference in QNX's implementation"
+    ],
+    correct: 0,
+    explain: "All threads within one process share the same address space (code, heap, global data) and file descriptors, differing mainly by their own stack and register context. Separate processes, by contrast, have fully independent address spaces unless explicitly sharing memory via shm_open() or similar."
+  },
+  {
+    topic: "Multithreading Pitfalls",
+    q: "A thread is repeatedly denied CPU time because other threads always get scheduled ahead of it, even though it is never blocked. What is this specific problem called?",
+    options: [
+      "Deadlock, since the thread can never proceed",
+      "Starvation, since the thread is perpetually deprioritized",
+      "A data race, since memory is being corrupted",
+      "A livelock, since two threads block on each other"
+    ],
+    correct: 1,
+    explain: "Starvation occurs when a runnable thread is repeatedly passed over for scheduling, often because lower-priority threads never get CPU time under a strict priority scheme. This differs from deadlock (mutual blocking with no progress possible) and data races (unsynchronized concurrent memory access)."
+  }
+];
+
+const quizEl = document.getElementById('quiz');
+const scoreEl = document.getElementById('score');
+const fillEl = document.getElementById('progress-fill');
+const resetBtn = document.getElementById('reset-btn');
+let answered = new Array(QUESTIONS.length).fill(false);
+
+function letterFor(i){ return String.fromCharCode(65+i); }
+
+function render(){
+  quizEl.innerHTML = '';
+  QUESTIONS.forEach((item, qi) => {
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.id = 'card-' + qi;
+
+    const meta = document.createElement('div');
+    meta.className = 'qmeta';
+    meta.innerHTML = `<span class="qnum">Question ${qi+1} / ${QUESTIONS.length}</span><span class="topic-tag">${item.topic}</span>`;
+    card.appendChild(meta);
+
+    const qtext = document.createElement('p');
+    qtext.className = 'qtext';
+    qtext.textContent = item.q;
+    card.appendChild(qtext);
+
+    const optsWrap = document.createElement('div');
+    optsWrap.className = 'options';
+
+    item.options.forEach((optText, oi) => {
+      const btn = document.createElement('button');
+      btn.className = 'opt';
+      btn.innerHTML = `<span class="letter">${letterFor(oi)}</span><span>${optText}</span>`;
+      btn.addEventListener('click', () => selectAnswer(qi, oi));
+      optsWrap.appendChild(btn);
+    });
+
+    card.appendChild(optsWrap);
+
+    const explain = document.createElement('div');
+    explain.className = 'explain';
+    explain.id = 'explain-' + qi;
+    explain.innerHTML = `<b>Why:</b> ${item.explain}`;
+    card.appendChild(explain);
+
+    quizEl.appendChild(card);
+  });
+  updateProgress();
+}
+
+function selectAnswer(qi, oi){
+  if(answered[qi]) return;
+  answered[qi] = true;
+
+  const card = document.getElementById('card-'+qi);
+  card.classList.add('answered');
+  const opts = card.querySelectorAll('.opt');
+  const correctIdx = QUESTIONS[qi].correct;
+
+  opts.forEach((btn, i) => {
+    btn.disabled = true;
+    if(i === correctIdx){
+      btn.classList.add('correct');
+      btn.querySelector('.letter').textContent = '✓';
+      const m = document.createElement('span');
+      m.className = 'mark c';
+      m.textContent = 'Correct';
+      btn.appendChild(m);
+    } else if(i === oi){
+      btn.classList.add('incorrect');
+      btn.querySelector('.letter').textContent = '✕';
+      const m = document.createElement('span');
+      m.className = 'mark x';
+      m.textContent = 'Your pick';
+      btn.appendChild(m);
+    } else {
+      btn.classList.add('dim');
+    }
+  });
+
+  document.getElementById('explain-'+qi).classList.add('show');
+  updateProgress();
+}
+
+function updateProgress(){
+  const count = answered.filter(Boolean).length;
+  scoreEl.textContent = `${count} / ${QUESTIONS.length} answered`;
+  fillEl.style.width = (count / QUESTIONS.length * 100) + '%';
+  resetBtn.style.display = (count === QUESTIONS.length) ? 'block' : 'none';
+}
+
+resetBtn.addEventListener('click', () => {
+  answered = new Array(QUESTIONS.length).fill(false);
+  render();
+  window.scrollTo({top:0, behavior:'smooth'});
+});
+
+render();
+</script>
+</body>
+</html>
