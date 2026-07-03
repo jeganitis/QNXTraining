@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Building a QNX Resource Manager — /dev/example</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0a121c; --bg-raise:#0f1c29; --card:#10202f; --line:#1e3346;
+    --text:#e7eef4; --muted:#7f95a8;
+    --teal:#3fc9b0; --teal-dim:#1e5850;
+    --amber:#e6a94f; --amber-dim:#5a4423;
+    --violet:#9a8cf2; --violet-dim:#332e5c;
+    --red:#e0685c;
+    --mono:'IBM Plex Mono', ui-monospace, Menlo, Consolas, monospace;
+    --sans:'IBM Plex Sans', -apple-system, Segoe UI, sans-serif;
+    --disp:'Space Grotesk', var(--sans);
+  }
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{
+    margin:0;
+    background:
+      radial-gradient(1200px 600px at 15% -10%, #0f2436 0%, transparent 60%),
+      radial-gradient(900px 500px at 100% 10%, #0d1f2a 0%, transparent 55%),
+      var(--bg);
+    color:var(--text); font-family:var(--sans); line-height:1.55;
+  }
+  @media (prefers-reduced-motion: reduce){ *{ animation-duration:.01ms !important; transition-duration:.01ms !important; } }
+
+  .wrap{max-width:1100px;margin:0 auto;padding:56px 24px 110px;}
+
+  .toc{
+    position:sticky; top:0; z-index:20;
+    background:rgba(10,18,28,0.92); backdrop-filter:blur(6px);
+    border-bottom:1px solid var(--line); margin:0 0 48px; padding:12px 0;
+  }
+  .toc-inner{
+    max-width:1100px;margin:0 auto;padding:0 24px;
+    display:flex; gap:18px; flex-wrap:wrap; align-items:center;
+    font-family:var(--mono); font-size:12px;
+  }
+  .toc a{ color:var(--muted); text-decoration:none; }
+  .toc a:hover{ color:var(--teal); }
+  .toc .doc-id{ color:var(--teal); margin-right:auto; letter-spacing:.08em; }
+
+  header{ margin-bottom:52px; }
+  .eyebrow{
+    font-family:var(--mono); font-size:12.5px; letter-spacing:.14em; text-transform:uppercase;
+    color:var(--teal); display:flex; align-items:center; gap:10px; margin-bottom:16px;
+  }
+  .eyebrow::before{ content:''; width:7px;height:7px;border-radius:50%; background:var(--teal); box-shadow:0 0 0 4px var(--teal-dim); }
+  h1{ font-family:var(--disp); font-weight:700; font-size:clamp(28px,4.2vw,44px); line-height:1.1; margin:0 0 18px; }
+  h1 em{ font-style:normal; color:var(--teal); }
+  .lede{ color:var(--muted); font-size:16.5px; max-width:680px; }
+  code{ font-family:var(--mono); }
+  p code, li code, td code{ background:#0a1520; border:1px solid var(--line); border-radius:5px; padding:1px 6px; font-size:.9em; color:#bfe8dd; }
+
+  section{ margin-bottom:60px; scroll-margin-top:70px; }
+  .sec-head{ display:flex; align-items:baseline; gap:12px; margin-bottom:8px; }
+  .sec-num{ font-family:var(--mono); color:var(--teal); font-size:14px; }
+  h2{ font-family:var(--disp); font-weight:600; font-size:23px; margin:0; }
+  .section-sub{ color:var(--muted); font-size:14.5px; margin:8px 0 24px; max-width:680px; }
+
+  /* concept grid */
+  .concept-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:14px; }
+  @media (max-width:900px){ .concept-grid{ grid-template-columns:repeat(2,1fr); } }
+  @media (max-width:560px){ .concept-grid{ grid-template-columns:1fr; } }
+  .concept{ background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px 18px; }
+  .concept .k{ font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--teal); margin-bottom:7px; }
+  .concept p{ margin:0; font-size:13px; color:#c3d1dc; }
+
+  /* stage tabs */
+  .stage-tabs{ display:flex; gap:8px; margin-bottom:18px; flex-wrap:wrap; }
+  .stage-btn{
+    font-family:var(--mono); font-size:12.5px; background:transparent; color:var(--muted);
+    border:1px solid var(--line); border-radius:20px; padding:8px 16px; cursor:pointer;
+    display:flex; align-items:center; gap:8px;
+  }
+  .stage-btn .num{
+    width:18px;height:18px;border-radius:50%; background:var(--bg-raise); border:1px solid var(--line);
+    display:inline-flex; align-items:center; justify-content:center; font-size:10px;
+  }
+  .stage-btn.active{ color:var(--text); border-color:var(--teal); background:var(--bg-raise); }
+  .stage-btn.active .num{ background:var(--teal); color:#04211c; border-color:var(--teal); }
+  .stage-panel{ display:none; }
+  .stage-panel.active{ display:block; }
+  .stage-desc{
+    background:var(--card); border:1px solid var(--line); border-left:3px solid var(--teal);
+    border-radius:8px; padding:14px 18px; margin-bottom:16px; font-size:14px; color:#c9d8e3;
+  }
+  .stage-desc b{ color:var(--text); }
+  pre.code-block{
+    background:#060d14; border:1px solid var(--line); border-radius:12px;
+    padding:20px 22px; overflow-x:auto; font-family:var(--mono); font-size:12.8px;
+    line-height:1.65; color:#c7d6e0;
+  }
+  pre.code-block .c1{ color:#5c7387; font-style:italic; }
+  pre.code-block .kw{ color:#e6a94f; }
+  pre.code-block .fn{ color:#3fc9b0; }
+  pre.code-block .str{ color:#9fd68f; }
+  pre.code-block .new{
+    display:block; margin:0 -22px; padding:0 22px;
+    background:rgba(63,201,176,0.1); border-left:2px solid var(--teal);
+  }
+
+  /* sim */
+  .sim-card{ background:var(--card); border:1px solid var(--line); border-radius:16px; padding:26px; }
+  .sim-controls{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:24px; }
+  button.ctl{
+    font-family:var(--mono); font-size:13px; background:var(--bg-raise); border:1px solid var(--line);
+    color:var(--text); padding:9px 16px; border-radius:8px; cursor:pointer;
+  }
+  button.ctl:hover{ border-color:var(--teal); }
+  button.ctl.primary{ background:var(--teal); color:#04211c; border-color:var(--teal); font-weight:600; }
+  button.ctl:disabled{ opacity:.35; cursor:default; }
+  .speed{ margin-left:auto; display:flex; align-items:center; gap:8px; font-family:var(--mono); font-size:12px; color:var(--muted); }
+  .speed input{ accent-color:var(--teal); }
+  select.opctl{
+    font-family:var(--mono); font-size:12.5px; background:var(--bg-raise); color:var(--text);
+    border:1px solid var(--line); border-radius:8px; padding:8px 12px;
+  }
+
+  .lanes{ display:grid; grid-template-columns:1fr 1.2fr 1fr; gap:0; margin-bottom:10px; }
+  @media (max-width:760px){ .lanes{ grid-template-columns:1fr; gap:14px; } }
+  .lane{ text-align:center; }
+  .lane .box{
+    display:inline-flex; flex-direction:column; align-items:center; gap:6px;
+    padding:14px 18px; border-radius:12px; border:1.5px solid var(--line);
+    background:var(--bg-raise); min-width:150px; transition:border-color .25s, box-shadow .25s;
+  }
+  .lane .box.active{ border-color:var(--teal); box-shadow:0 0 0 5px var(--teal-dim); }
+  .lane .name{ font-family:var(--disp); font-weight:600; font-size:14.5px; }
+  .lane .state{
+    font-family:var(--mono); font-size:10.5px; color:var(--muted);
+    padding:3px 8px; border-radius:20px; background:#081119; border:1px solid var(--line); min-height:16px;
+  }
+  .lane .state.blocked{ color:var(--amber); border-color:var(--amber-dim); }
+  .lane .state.running{ color:var(--teal); border-color:var(--teal-dim); }
+
+  .rails{ position:relative; height:56px; margin-bottom:16px; }
+  .rail-track{ position:absolute; top:50%; height:2px; background:var(--line); transform:translateY(-50%); }
+  .rail-left{ left:4%; width:27%; } .rail-right{ right:4%; width:27%; }
+  .dot{
+    position:absolute; top:50%; width:14px; height:14px; border-radius:50%;
+    background:var(--teal); box-shadow:0 0 12px 2px rgba(63,201,176,.55);
+    transform:translate(-50%,-50%); opacity:0; transition:left var(--dur,.9s) linear, opacity .15s;
+  }
+  .dot.reply{ background:var(--amber); box-shadow:0 0 12px 2px rgba(230,169,79,.55); }
+  .dot .lbl{ position:absolute; top:-21px; left:50%; transform:translateX(-50%); font-family:var(--mono); font-size:9.5px; white-space:nowrap; color:var(--text); }
+
+  .step-caption{
+    font-family:var(--mono); font-size:12.5px; color:var(--muted); min-height:34px;
+    padding:10px 14px; background:#081119; border:1px solid var(--line); border-radius:8px;
+  }
+  .step-caption b{ color:var(--text); font-weight:500; }
+
+  /* function reference table */
+  table.ref{ width:100%; border-collapse:collapse; font-size:13.5px; }
+  table.ref th, table.ref td{ text-align:left; padding:11px 12px; border-bottom:1px solid var(--line); vertical-align:top; }
+  table.ref th{ font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); }
+  table.ref tr:last-child td{ border-bottom:none; }
+
+  footer{ color:var(--muted); font-size:12.5px; font-family:var(--mono); border-top:1px solid var(--line); padding-top:20px; margin-top:10px; }
+</style>
+</head>
+<body>
+
+<nav class="toc">
+  <div class="toc-inner">
+    <span class="doc-id">/dev/example · resmgr walkthrough</span>
+    <a href="#architecture">Architecture</a>
+    <a href="#build">Build stages</a>
+    <a href="#flow">Runtime flow</a>
+    <a href="#reference">Reference</a>
+  </div>
+</nav>
+
+<div class="wrap">
+
+  <header>
+    <div class="eyebrow">QNX Neutrino · Resource Manager Framework</div>
+    <h1>Building <em>/dev/example</em>:<br>from skeleton to a working device</h1>
+    <p class="lede">
+      A step-by-step walkthrough of how <code>example_initialization.c</code>, <code>example_read.c</code>,
+      and <code>example_write.c</code> progressively build into the final <code>example.c</code> —
+      plus an animated trace of what actually happens inside the resource manager when a client
+      opens, reads, and writes the device.
+    </p>
+  </header>
+
+  <section id="architecture">
+    <div class="sec-head"><span class="sec-num">1.</span><h2>The four moving parts</h2></div>
+    <p class="section-sub">Every QNX resource manager is built from the same framework pieces, regardless of what device it implements.</p>
+    <div class="concept-grid">
+      <div class="concept">
+        <div class="k">dispatch_t</div>
+        <p>Created by <code>dispatch_create_channel()</code>. Owns the channel that clients connect to and the internal registry of handlers.</p>
+      </div>
+      <div class="concept">
+        <div class="k">connect_funcs / io_funcs</div>
+        <p>Function-pointer tables. <code>iofunc_func_init()</code> fills them with sane POSIX defaults; you override only the ones you care about — here, <code>open</code>, <code>read</code>, <code>write</code>.</p>
+      </div>
+      <div class="concept">
+        <div class="k">iofunc_attr_t</div>
+        <p>Describes the device node itself: type (<code>S_IFCHR</code>), permissions (<code>0666</code>), owner. Used by the default handlers for permission checks.</p>
+      </div>
+      <div class="concept">
+        <div class="k">dispatch_context_t</div>
+        <p>The per-loop receive buffer. <code>dispatch_block()</code> blocks here waiting for the next message or pulse — this <em>is</em> the MsgReceive() from the client/server diagram.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="build">
+    <div class="sec-head"><span class="sec-num">2.</span><h2>Building it in three stages</h2></div>
+    <p class="section-sub">The uploaded files aren't four unrelated programs — they're the same device built incrementally. Each stage adds one capability on top of the last.</p>
+
+    <div class="stage-tabs">
+      <button class="stage-btn active" data-stage="1"><span class="num">1</span> Skeleton</button>
+      <button class="stage-btn" data-stage="2"><span class="num">2</span> + Read</button>
+      <button class="stage-btn" data-stage="3"><span class="num">3</span> + Write</button>
+    </div>
+
+    <div class="stage-panel active" id="stage-1">
+      <div class="stage-desc">
+        <b>example_initialization.c</b> — registers <code>/dev/example</code> and wires up the framework, but the I/O handlers are stubs.
+        <code>io_read()</code> always replies with 0 bytes (immediate EOF); <code>io_write()</code> accepts any number
+        of bytes and claims success without storing anything. Nothing is broken — every syscall the client makes
+        returns cleanly — there's just no real data path yet.
+      </div>
+      <pre class="code-block">int io_read (resmgr_context_t *ctp, io_read_t *msg, RESMGR_OCB_T *ocb)
+{
+    int status;
+    if ((status = iofunc_read_verify(ctp, msg, ocb, NULL)) != EOK)
+        return status;
+    if ((msg-&gt;i.xtype &amp; _IO_XTYPE_MASK) != _IO_XTYPE_NONE)
+        return ENOSYS;
+
+<span class="new">    <span class="c1">// reply with 0 bytes -- that is EOF, no real data yet</span>
+    <span class="fn">MsgReply</span>(ctp-&gt;rcvid, 0, NULL, 0);</span>
+
+    if (msg-&gt;i.nbytes &gt; 0)
+        ocb-&gt;attr-&gt;flags |= IOFUNC_ATTR_ATIME;
+    return _RESMGR_NOREPLY;
+}
+
+int io_write (resmgr_context_t *ctp, io_write_t *msg, RESMGR_OCB_T *ocb)
+{
+    int status;
+    if ((status = iofunc_write_verify(ctp, msg, ocb, NULL)) != EOK)
+        return status;
+    if ((msg-&gt;i.xtype &amp; _IO_XTYPE_MASK) != _IO_XTYPE_NONE)
+        return ENOSYS;
+
+<span class="new">    <span class="c1">// pretend we wrote everything -- data actually goes nowhere</span>
+    <span class="fn">MsgReply</span>(ctp-&gt;rcvid, msg-&gt;i.nbytes, NULL, 0);</span>
+
+    if (msg-&gt;i.nbytes &gt; 0)
+        ocb-&gt;attr-&gt;flags |= IOFUNC_ATTR_MTIME | IOFUNC_ATTR_CTIME;
+    return _RESMGR_NOREPLY;
+}</pre>
+    </div>
+
+    <div class="stage-panel" id="stage-2">
+      <div class="stage-desc">
+        <b>example_read.c</b> — <code>io_read()</code> now returns real data: a fixed string <code>"hello "</code>,
+        truncated to whatever the client actually asked for via <code>min(nb, msg-&gt;i.nbytes)</code>.
+        <code>io_write()</code> is untouched — still the stub from stage 1.
+      </div>
+      <pre class="code-block">int io_read (resmgr_context_t *ctp, io_read_t *msg, RESMGR_OCB_T *ocb)
+{
+    int status;
+<span class="new">    char data[] = "hello "; <span class="c1">// made up data</span>
+    size_t nb;</span>
+
+    if ((status = iofunc_read_verify(ctp, msg, ocb, NULL)) != EOK)
+        return status;
+    if ((msg-&gt;i.xtype &amp; _IO_XTYPE_MASK) != _IO_XTYPE_NONE)
+        return ENOSYS;
+
+<span class="new">    <span class="c1">// how much data do we have, vs. what the client wants?</span>
+    nb = <span class="kw">sizeof</span>(data);
+    nb = <span class="fn">min</span>( nb, msg-&gt;i.nbytes );
+
+    <span class="c1">// copy back to client, tell their read() to return nb</span>
+    <span class="fn">MsgReply</span>(ctp-&gt;rcvid, nb, data, nb);</span>
+
+    if (nb &gt; 0)
+        ocb-&gt;attr-&gt;flags |= IOFUNC_ATTR_ATIME;
+    return _RESMGR_NOREPLY;
+}
+
+<span class="c1">/* io_write() unchanged from stage 1 -- still a stub */</span></pre>
+    </div>
+
+    <div class="stage-panel" id="stage-3">
+      <div class="stage-desc">
+        <b>example_write.c</b> (== final <b>example.c</b>) — <code>io_write()</code> now actually captures the
+        client's bytes: allocate a buffer, pull the payload out with <code>resmgr_msgget()</code>, and print it
+        to stdout. <code>io_read()</code> stays as it was in stage 2.
+      </div>
+      <pre class="code-block">int io_write (resmgr_context_t *ctp, io_write_t *msg, RESMGR_OCB_T *ocb)
+{
+    int status;
+<span class="new">    ssize_t nb;
+    char *buf;</span>
+
+    if ((status = iofunc_write_verify(ctp, msg, ocb, NULL)) != EOK)
+        return status;
+    if ((msg-&gt;i.xtype &amp; _IO_XTYPE_MASK) != _IO_XTYPE_NONE)
+        return ENOSYS;
+
+    if (msg-&gt;i.nbytes == 0) {
+        MsgReply(ctp-&gt;rcvid, 0, NULL, 0);
+        return _RESMGR_NOREPLY;
+    }
+
+<span class="new">    <span class="c1">// somewhere to put the data -- in a real driver, a hardware buffer</span>
+    buf = <span class="fn">malloc</span>(msg-&gt;i.nbytes);
+    if (buf == NULL) return ENOMEM;
+
+    <span class="c1">// pull the payload out of the message, past our header</span>
+    nb = <span class="fn">resmgr_msgget</span>(ctp, buf, msg-&gt;i.nbytes, <span class="kw">sizeof</span>(*msg));
+    if (nb == -1) { free(buf); return errno; }
+
+    <span class="c1">// dump it to stdout instead of into the void</span>
+    status = <span class="fn">write</span>( STDOUT_FILENO, buf, nb );
+    free(buf);
+    if (status == -1) return errno;
+
+    <span class="fn">MsgReply</span>(ctp-&gt;rcvid, nb, NULL, 0);</span>
+
+    if (nb &gt; 0)
+        ocb-&gt;attr-&gt;flags |= IOFUNC_ATTR_MTIME | IOFUNC_ATTR_CTIME;
+    return _RESMGR_NOREPLY;
+}
+
+<span class="c1">/* io_read() unchanged from stage 2 */</span></pre>
+    </div>
+  </section>
+
+  <section id="flow">
+    <div class="sec-head"><span class="sec-num">3.</span><h2>Runtime code flow</h2></div>
+    <p class="section-sub">What actually happens, message by message, when a client runs <code>cat /dev/example</code> or <code>echo hi &gt; /dev/example</code> against the final version. Pick an operation and step through it.</p>
+
+    <div class="sim-card">
+      <div class="sim-controls">
+        <select class="opctl" id="opSelect">
+          <option value="open_read">Client: open() then read()</option>
+          <option value="write">Client: write()</option>
+        </select>
+        <button class="ctl primary" id="playBtn">▶ Run</button>
+        <button class="ctl" id="stepBtn">Step once</button>
+        <button class="ctl" id="resetBtn">Reset</button>
+        <div class="speed"><span>speed</span><input type="range" id="speedSlider" min="1" max="3" value="2" step="1"></div>
+      </div>
+
+      <div class="lanes">
+        <div class="lane"><div class="box" id="clientBox"><div class="name">Client</div><div class="state" id="clientState">idle</div></div></div>
+        <div class="lane"><div class="box" id="rmBox"><div class="name">Resource Manager · main loop</div><div class="state" id="rmState">idle</div></div></div>
+        <div class="lane"><div class="box" id="handlerBox"><div class="name">Handler</div><div class="state" id="handlerState">idle</div></div></div>
+      </div>
+
+      <div class="rails">
+        <div class="rail-track rail-left"></div>
+        <div class="rail-track rail-right"></div>
+        <div class="dot" id="dotLeft"><span class="lbl" id="dotLeftLbl"></span></div>
+        <div class="dot" id="dotRight"><span class="lbl" id="dotRightLbl"></span></div>
+      </div>
+
+      <div class="step-caption" id="caption">Choose an operation and press <b>Run</b>.</div>
+    </div>
+  </section>
+
+  <section id="reference">
+    <div class="sec-head"><span class="sec-num">4.</span><h2>Function reference</h2></div>
+    <table class="ref">
+      <tr><th>Call</th><th>Stage introduced</th><th>Role</th></tr>
+      <tr><td><code>dispatch_create_channel()</code></td><td>1</td><td>Creates the kernel channel clients connect to; returns the <code>dispatch_t</code>.</td></tr>
+      <tr><td><code>iofunc_func_init()</code></td><td>1</td><td>Fills <code>connect_funcs</code>/<code>io_funcs</code> with POSIX-default handlers before you override any.</td></tr>
+      <tr><td><code>iofunc_attr_init()</code></td><td>1</td><td>Initializes the device's attribute structure — type, permissions, owner.</td></tr>
+      <tr><td><code>secpol_resmgr_attach()</code></td><td>1</td><td>Registers the <code>/dev/example</code> name with the process manager and binds your function tables to it.</td></tr>
+      <tr><td><code>dispatch_context_alloc()</code></td><td>1</td><td>Allocates the receive-loop context used by every <code>dispatch_block()</code> call.</td></tr>
+      <tr><td><code>dispatch_block()</code></td><td>1</td><td>Blocks waiting for the next client message or pulse — functionally <code>MsgReceive()</code> under the framework.</td></tr>
+      <tr><td><code>dispatch_handler()</code></td><td>1</td><td>Looks at what was received and calls the matching handler (<code>io_open</code>/<code>io_read</code>/<code>io_write</code>/...).</td></tr>
+      <tr><td><code>iofunc_open_default()</code></td><td>1</td><td>Default open handling — permission checks, OCB setup. Used as-is in all three stages.</td></tr>
+      <tr><td><code>iofunc_read_verify()</code> / <code>iofunc_write_verify()</code></td><td>1</td><td>Validates the request against the OCB's open mode before your handler does any work.</td></tr>
+      <tr><td><code>MsgReply()</code></td><td>1</td><td>Unblocks the client with a status and optional payload — the counterpart to the client's blocked <code>MsgSend()</code>.</td></tr>
+      <tr><td><code>resmgr_msgget()</code></td><td>3</td><td>Pulls the actual write payload out of the incoming message, skipping the header.</td></tr>
+    </table>
+  </section>
+
+  <footer>
+    /dev/example · example_initialization.c → example_read.c → example_write.c → example.c
+  </footer>
+</div>
+
+<script>
+(function(){
+  // ---- stage tabs ----
+  document.querySelectorAll('.stage-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      document.querySelectorAll('.stage-btn').forEach(b=>b.classList.remove('active'));
+      document.querySelectorAll('.stage-panel').forEach(p=>p.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('stage-'+btn.dataset.stage).classList.add('active');
+    });
+  });
+
+  // ---- runtime flow sim ----
+  const clientState=document.getElementById('clientState'), rmState=document.getElementById('rmState'), handlerState=document.getElementById('handlerState');
+  const clientBox=document.getElementById('clientBox'), rmBox=document.getElementById('rmBox'), handlerBox=document.getElementById('handlerBox');
+  const dotL=document.getElementById('dotLeft'), dotLLbl=document.getElementById('dotLeftLbl');
+  const dotR=document.getElementById('dotRight'), dotRLbl=document.getElementById('dotRightLbl');
+  const caption=document.getElementById('caption');
+  const playBtn=document.getElementById('playBtn'), stepBtn=document.getElementById('stepBtn'), resetBtn=document.getElementById('resetBtn');
+  const speedSlider=document.getElementById('speedSlider');
+  const opSelect=document.getElementById('opSelect');
+
+  function speedMs(){ const v=parseInt(speedSlider.value,10); return v===1?1500:v===2?850:420; }
+  function setState(el,text,kind){ el.textContent=text; el.className='state'+(kind?' '+kind:''); }
+  function setActive(box,on){ box.classList.toggle('active',!!on); }
+  function setCaption(html){ caption.innerHTML=html; }
+
+  function fireDot(dot,lbl,label,fromPct,toPct,cls,cb){
+    dot.className='dot'+(cls?' '+cls:'');
+    lbl.textContent=label;
+    dot.style.setProperty('--dur',(speedMs()*0.55)+'ms');
+    dot.style.left=fromPct+'%'; dot.style.opacity='0';
+    void dot.offsetWidth;
+    requestAnimationFrame(()=>{
+      dot.style.opacity='1'; dot.style.left=toPct+'%';
+      setTimeout(()=>{ dot.style.opacity='0'; if(cb) cb(); }, speedMs()*0.55);
+    });
+  }
+
+  function buildOpenReadSteps(){
+    return [
+      ()=>{ setState(clientState,'open("/dev/example")','running'); setActive(clientBox,true);
+        setCaption('Client calls <b>open()</b> on the C library — this becomes a connect message to the resource manager.'); },
+      ()=>{ setState(rmState,'dispatch_block() returns','running'); setActive(rmBox,true);
+        fireDot(dotL,dotLLbl,'open request',4,31,null); },
+      ()=>{ setState(rmState,'dispatch_handler() dispatches','running');
+        setCaption('<code>dispatch_handler()</code> sees a connect message and routes it to <code>connect_funcs.open</code>.'); },
+      ()=>{ setState(handlerState,'io_open()','running'); setActive(handlerBox,true);
+        fireDot(dotR,dotRLbl,'io_open',73,96,null,()=>{}); setCaption('<code>io_open()</code> runs, delegating to <code>iofunc_open_default()</code> for permission checks and OCB setup.'); },
+      ()=>{ setState(handlerState,'iofunc_open_default()','running');
+        setCaption('Default handler validates the request and implicitly replies — client\'s open() returns a file descriptor.'); },
+      ()=>{ setActive(handlerBox,false); setActive(rmBox,false);
+        setState(rmState,'dispatch_block() — blocked','blocked');
+        setActive(clientBox,false); setState(clientState,'fd acquired',null); },
+      ()=>{ setState(clientState,'read(fd, buf, N)','running'); setActive(clientBox,true);
+        setCaption('Client calls <b>read()</b>. This blocks the client (REPLY Blocked) and sends a read message.'); },
+      ()=>{ setState(rmState,'dispatch_block() returns','running'); setActive(rmBox,true);
+        fireDot(dotL,dotLLbl,'read request',4,31,null); },
+      ()=>{ setState(rmState,'dispatch_handler() dispatches','running');
+        setCaption('Routed to <code>io_funcs.read</code> — our overridden <code>io_read()</code>.'); },
+      ()=>{ setState(handlerState,'io_read()','running'); setActive(handlerBox,true);
+        setCaption('<code>iofunc_read_verify()</code> passes, xtype checked, then the handler builds the reply.'); },
+      ()=>{ setState(handlerState,'MsgReply(rcvid, nb, "hello ", nb)','running');
+        fireDot(dotR,dotRLbl,'MsgReply "hello "',73,96,'reply',()=>{
+          setState(clientState,'read() returns 6 bytes',null); setActive(clientBox,false);
+        });
+        setCaption('<code>MsgReply()</code> copies <code>"hello "</code> back into the client\'s buffer and unblocks it.'); },
+      ()=>{ setActive(handlerBox,false); setActive(rmBox,false);
+        setState(rmState,'dispatch_block() — blocked','blocked');
+        setState(handlerState,'idle',null);
+        setCaption('Resource manager returns to blocking on <code>dispatch_block()</code>, ready for the next client.'); }
+    ];
+  }
+
+  function buildWriteSteps(){
+    return [
+      ()=>{ setState(clientState,'write(fd, "hi\\n", 3)','running'); setActive(clientBox,true);
+        setCaption('Client calls <b>write()</b> — blocks (REPLY Blocked) and sends the payload as a message.'); },
+      ()=>{ setState(rmState,'dispatch_block() returns','running'); setActive(rmBox,true);
+        fireDot(dotL,dotLLbl,'write "hi" (3 bytes)',4,31,null); },
+      ()=>{ setState(rmState,'dispatch_handler() dispatches','running');
+        setCaption('Routed to <code>io_funcs.write</code> — our overridden <code>io_write()</code>.'); },
+      ()=>{ setState(handlerState,'io_write()','running'); setActive(handlerBox,true);
+        setCaption('<code>iofunc_write_verify()</code> passes; nbytes &gt; 0, so we proceed to capture the data.'); },
+      ()=>{ setState(handlerState,'malloc(nbytes)','running');
+        setCaption('Buffer allocated to hold the incoming payload — "in a real driver, this might be a hardware output buffer."'); },
+      ()=>{ setState(handlerState,'resmgr_msgget()','running');
+        setCaption('<code>resmgr_msgget()</code> copies the payload out of the message, skipping the header.'); },
+      ()=>{ setState(handlerState,'write(STDOUT_FILENO, buf, nb)','running');
+        setCaption('Data is written to stdout — visible in the resource manager\'s own terminal.'); },
+      ()=>{ setState(handlerState,'MsgReply(rcvid, nb, NULL, 0)','running');
+        fireDot(dotR,dotRLbl,'MsgReply nb=3',73,96,'reply',()=>{
+          setState(clientState,'write() returns 3',null); setActive(clientBox,false);
+        });
+        setCaption('<code>MsgReply()</code> tells the client how many bytes were accepted, unblocking it.'); },
+      ()=>{ setActive(handlerBox,false); setActive(rmBox,false);
+        setState(rmState,'dispatch_block() — blocked','blocked');
+        setState(handlerState,'idle',null);
+        setCaption('Back to blocking on <code>dispatch_block()</code>.'); }
+    ];
+  }
+
+  let steps=[], idx=0, playing=false, timer=null;
+
+  function resetSim(){
+    playing=false; clearTimeout(timer); idx=0;
+    steps = opSelect.value==='write' ? buildWriteSteps() : buildOpenReadSteps();
+    setState(clientState,'idle',null); setState(rmState,'idle',null); setState(handlerState,'idle',null);
+    setActive(clientBox,false); setActive(rmBox,false); setActive(handlerBox,false);
+    dotL.style.opacity='0'; dotR.style.opacity='0';
+    setCaption('Choose an operation and press <b>Run</b>.');
+    playBtn.disabled=false; stepBtn.disabled=false; playBtn.textContent='▶ Run';
+  }
+  function doStep(){ if(idx>=steps.length) return false; steps[idx](); idx++; return idx<steps.length; }
+  function playLoop(){ if(!playing) return; const more=doStep(); if(!more){ playing=false; playBtn.textContent='▶ Run'; return; } timer=setTimeout(playLoop,speedMs()); }
+
+  playBtn.addEventListener('click',()=>{
+    if(idx>=steps.length){ resetSim(); }
+    playing=!playing; playBtn.textContent=playing?'⏸ Pause':'▶ Resume';
+    if(playing) playLoop(); else clearTimeout(timer);
+  });
+  stepBtn.addEventListener('click',()=>{
+    playing=false; clearTimeout(timer); playBtn.textContent='▶ Run';
+    if(idx>=steps.length) resetSim();
+    doStep();
+  });
+  resetBtn.addEventListener('click',resetSim);
+  opSelect.addEventListener('change',resetSim);
+
+  resetSim();
+})();
+</script>
+</body>
+</html>
