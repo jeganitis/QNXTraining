@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>QNX Neutrino — Kernel Internals Quiz</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap');
+
+  :root{
+    --bg: #0a1420;
+    --bg-grid: #0d1826;
+    --card: #101f30;
+    --card-border: #1c3448;
+    --card-border-hover: #2a4d63;
+    --teal: #2dd9c4;
+    --teal-dim: #1a5f57;
+    --amber: #e8a33d;
+    --red: #f2555a;
+    --red-dim: #3a1c1e;
+    --green: #4fd88a;
+    --green-dim: #123324;
+    --text: #dce8ee;
+    --text-dim: #7d93a3;
+    --text-faint: #4b5f6e;
+    --mono: 'JetBrains Mono', monospace;
+    --sans: 'Inter', sans-serif;
+  }
+
+  *{box-sizing:border-box; margin:0; padding:0;}
+
+  body{
+    background:
+      linear-gradient(var(--bg-grid) 1px, transparent 1px) 0 0/100% 42px,
+      linear-gradient(90deg, var(--bg-grid) 1px, transparent 1px) 0 0/42px 100%,
+      var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    padding: 48px 20px 120px;
+    min-height: 100vh;
+  }
+
+  .wrap{ max-width: 760px; margin: 0 auto; }
+
+  /* ---- Header ---- */
+  header{ margin-bottom: 40px; }
+  .eyebrow{
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.18em;
+    color: var(--teal);
+    text-transform: uppercase;
+    display:flex;
+    align-items:center;
+    gap:10px;
+    margin-bottom: 14px;
+  }
+  .eyebrow::before{
+    content:"";
+    width:8px; height:8px;
+    background: var(--teal);
+    box-shadow: 0 0 8px var(--teal);
+    display:inline-block;
+  }
+  h1{
+    font-family: var(--mono);
+    font-weight: 800;
+    font-size: clamp(28px, 5vw, 40px);
+    letter-spacing: -0.01em;
+    color: #f2f8fa;
+    line-height: 1.15;
+  }
+  h1 span{ color: var(--teal); }
+  .sub{
+    color: var(--text-dim);
+    font-size: 14.5px;
+    margin-top: 12px;
+    max-width: 54ch;
+    line-height: 1.6;
+  }
+
+  /* ---- Score bar ---- */
+  .scorebar{
+    position: sticky;
+    top: 16px;
+    z-index: 10;
+    background: rgba(16,31,48,0.92);
+    backdrop-filter: blur(8px);
+    border: 1px solid var(--card-border);
+    border-radius: 10px;
+    padding: 14px 18px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    margin-bottom: 36px;
+    font-family: var(--mono);
+  }
+  .scorebar .label{
+    font-size: 11px;
+    color: var(--text-faint);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .scorebar .score{
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--teal);
+  }
+  .scorebar .score .of{ color: var(--text-faint); font-weight:500; }
+  .track{
+    flex:1;
+    height:6px;
+    margin: 0 20px;
+    background: #14273a;
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .track-fill{
+    height:100%;
+    width:0%;
+    background: linear-gradient(90deg, var(--teal-dim), var(--teal));
+    transition: width 0.35s ease;
+  }
+
+  /* ---- Question cards ---- */
+  .q{
+    background: var(--card);
+    border: 1px solid var(--card-border);
+    border-radius: 12px;
+    padding: 26px 26px 24px;
+    margin-bottom: 20px;
+    transition: border-color 0.25s ease;
+  }
+  .q:hover{ border-color: var(--card-border-hover); }
+
+  .q-head{
+    display:flex;
+    align-items:flex-start;
+    gap:14px;
+    margin-bottom: 18px;
+  }
+  .q-num{
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--bg);
+    background: var(--text-faint);
+    min-width: 30px;
+    height: 30px;
+    border-radius: 7px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    flex-shrink:0;
+    transition: background 0.25s ease, color 0.25s ease;
+  }
+  .q.answered .q-num{ background: var(--teal); }
+  .q.answered.wrong .q-num{ background: var(--red); }
+
+  .q-meta{ flex:1; }
+  .tag{
+    display:inline-block;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    border-radius: 4px;
+    margin-bottom: 8px;
+    border: 1px solid;
+  }
+  .tag.threads{ color:#8ec9ff; border-color:#25445f; background:#12253a; }
+  .tag.ipc{ color:#ffb26b; border-color:#5a3d1e; background:#2a1e10; }
+  .tag.sync{ color:#b498ff; border-color:#3d2f5f; background:#201936; }
+  .tag.irq{ color:#ff8b8b; border-color:#5a2323; background:#2a1414; }
+
+  .q-text{
+    font-size: 16px;
+    line-height: 1.55;
+    color: #eef4f7;
+    font-weight: 500;
+  }
+  .q-text code{
+    font-family: var(--mono);
+    background: #0d1c2b;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 0.9em;
+    color: var(--teal);
+    border: 1px solid #17324a;
+  }
+
+  .opts{ display:flex; flex-direction:column; gap:9px; }
+  .opt{
+    text-align:left;
+    background: #0c1a29;
+    border: 1px solid #1a2f42;
+    color: var(--text);
+    padding: 12px 14px;
+    border-radius: 8px;
+    font-family: var(--sans);
+    font-size: 14.5px;
+    cursor: pointer;
+    display:flex;
+    align-items:center;
+    gap:12px;
+    transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+  }
+  .opt:hover:not(:disabled){
+    border-color: var(--teal-dim);
+    background: #0e2130;
+  }
+  .opt:active:not(:disabled){ transform: scale(0.995); }
+  .opt-key{
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-faint);
+    border: 1px solid #223a4e;
+    width: 20px; height:20px;
+    border-radius: 5px;
+    display:flex; align-items:center; justify-content:center;
+    flex-shrink:0;
+  }
+  .opt-text{ flex:1; }
+  .opt-icon{ font-size:15px; flex-shrink:0; width:18px; text-align:center; }
+
+  .opt:disabled{ cursor: default; }
+  .opt.correct{
+    background: var(--green-dim);
+    border-color: var(--green);
+    color: #d3ffe8;
+  }
+  .opt.correct .opt-key{ border-color: var(--green); color: var(--green); }
+  .opt.selected-wrong{
+    background: var(--red-dim);
+    border-color: var(--red);
+    color: #ffdcdd;
+  }
+  .opt.selected-wrong .opt-key{ border-color: var(--red); color: var(--red); }
+  .opt.faded{ opacity: 0.35; }
+
+  .explain{
+    margin-top: 16px;
+    padding: 14px 16px;
+    background: #0a1a24;
+    border-left: 3px solid var(--teal-dim);
+    border-radius: 0 8px 8px 0;
+    font-size: 13.5px;
+    line-height: 1.6;
+    color: var(--text-dim);
+    display: none;
+  }
+  .explain.show{ display:block; animation: slideIn 0.25s ease; }
+  .explain b{ color: var(--teal); font-family: var(--mono); font-weight:600; }
+  @keyframes slideIn{
+    from{ opacity:0; transform: translateY(-6px); }
+    to{ opacity:1; transform: translateY(0); }
+  }
+
+  /* ---- Result footer ---- */
+  .result{
+    margin-top: 36px;
+    padding: 28px;
+    background: linear-gradient(145deg, #0f2333, #0a1a26);
+    border: 1px solid var(--card-border);
+    border-radius: 12px;
+    text-align: center;
+    display: none;
+  }
+  .result.show{ display:block; animation: slideIn 0.4s ease; }
+  .result .big{
+    font-family: var(--mono);
+    font-size: 42px;
+    font-weight: 800;
+    color: var(--teal);
+  }
+  .result .verdict{
+    color: var(--text-dim);
+    font-size: 14px;
+    margin-top: 8px;
+  }
+  .reset-btn{
+    margin-top: 18px;
+    background: transparent;
+    border: 1px solid var(--teal-dim);
+    color: var(--teal);
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 10px 20px;
+    border-radius: 7px;
+    cursor: pointer;
+    transition: background 0.2s ease;
+  }
+  .reset-btn:hover{ background: var(--teal-dim); color: #fff; }
+
+  @media (prefers-reduced-motion: reduce){
+    *{ animation: none !important; transition: none !important; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="eyebrow">Pyjama Cafe // QNX Lab Module</div>
+    <h1>Kernel Internals<span>.</span><br>Threads · IPC · Sync · IRQ</h1>
+    <p class="sub">10 scenario-based questions on QNX Neutrino microkernel internals. Pick an option — the correct answer and a short explanation reveal immediately after your choice locks in.</p>
+  </header>
+
+  <div class="scorebar">
+    <div>
+      <div class="label">Score</div>
+      <div class="score"><span id="scoreVal">0</span><span class="of">/10</span></div>
+    </div>
+    <div class="track"><div class="track-fill" id="trackFill"></div></div>
+    <div style="font-family:var(--mono); font-size:11px; color:var(--text-faint);" id="answeredCount">0/10 answered</div>
+  </div>
+
+  <div id="quizRoot"></div>
+
+  <div class="result" id="resultBox">
+    <div class="big"><span id="finalScore">0</span>/10</div>
+    <div class="verdict" id="verdictText"></div>
+    <button class="reset-btn" onclick="resetQuiz()">Retake Quiz</button>
+  </div>
+
+</div>
+
+<script>
+const QUESTIONS = [
+  {
+    tag: "threads",
+    q: "A QNX Neutrino thread is created with default attributes and no explicit scheduling policy set. What scheduling policy does it inherit?",
+    opts: [
+      "SCHED_FIFO, inherited from the process",
+      "SCHED_OTHER, a fair time-sharing policy",
+      "SCHED_RR, inherited from the parent thread that created it",
+      "SCHED_SPORADIC, QNX's default for real-time safety"
+    ],
+    correct: 2,
+    explain: "By default, a new thread inherits the scheduling policy (and priority) of the thread that created it, via <b>pthread_create()</b> with default attributes. QNX does not silently assign SCHED_OTHER — there is no such policy in Neutrino; the three real scheduling policies are FIFO, RR, and Sporadic."
+  },
+  {
+    tag: "irq",
+    q: "Inside a QNX interrupt service routine registered via <code>InterruptAttach()</code>, which of the following is strictly disallowed?",
+    opts: [
+      "Reading from a memory-mapped hardware register",
+      "Calling MsgSend() to a resource manager",
+      "Returning a value that tells the kernel whether to unmask the interrupt",
+      "Modifying a global variable shared with the attaching thread"
+    ],
+    correct: 1,
+    explain: "ISRs attached with <b>InterruptAttach()</b> run in a restricted context and must not call any function that can block, including <b>MsgSend()</b>. Blocking kernel calls from an ISR would stall the entire interrupt subsystem. Register I/O, updating shared state (with appropriate care), and controlling interrupt masking via the return value are all standard and expected in an ISR."
+  },
+  {
+    tag: "sync",
+    q: "Thread A (priority 10) holds a mutex. Thread B (priority 25) blocks on that same mutex. Thread C (priority 15) is runnable and does not need the mutex. Assuming the mutex was created with priority inheritance enabled, what happens to Thread A's effective priority while B is blocked?",
+    opts: [
+      "It stays at 10, since priority inheritance only applies to condvars",
+      "It is boosted to 25, matching the highest-priority blocked waiter",
+      "It is boosted to 15, matching Thread C so no starvation occurs",
+      "It is boosted to 25 only if C is also blocked on the mutex"
+    ],
+    correct: 1,
+    explain: "This is the textbook fix for <b>priority inversion</b>. With priority inheritance enabled (the QNX default for <b>pthread_mutex</b>), the mutex owner's effective priority is temporarily raised to match the highest-priority thread blocked waiting for it — here, 25 — so Thread C at priority 15 cannot preempt A and indirectly starve B."
+  },
+  {
+    tag: "ipc",
+    q: "A client calls <code>MsgSend()</code> to a server. The server has not yet called <code>MsgReceive()</code>. What state does the client thread enter?",
+    opts: [
+      "RUNNING, since MsgSend() is asynchronous by default",
+      "SEND-blocked, waiting for the server to receive the message",
+      "REPLY-blocked, waiting for the server's reply",
+      "It returns immediately with EAGAIN"
+    ],
+    correct: 1,
+    explain: "QNX message passing is synchronous. The client blocks in <b>SEND-blocked</b> state until the server calls <b>MsgReceive()</b> and accepts the message. Once received, the client transitions to <b>REPLY-blocked</b> until the server calls <b>MsgReply()</b>. There is no async default and no EAGAIN return for a normal blocking MsgSend()."
+  },
+  {
+    tag: "threads",
+    q: "Two threads run under SCHED_RR at the same priority. Thread X is currently running when its RR time quantum expires, and Thread Y is ready at the same priority. What happens?",
+    opts: [
+      "X continues running since RR only applies across different priorities",
+      "X is preempted and moved to the back of its priority's ready queue; Y runs next",
+      "X and Y are merged into a single round-robin execution context",
+      "The kernel raises Y's priority to break the tie before scheduling"
+    ],
+    correct: 1,
+    explain: "SCHED_RR time-slices threads of <b>equal priority</b>. When X's quantum expires, it's preempted and placed at the back of the ready queue for that priority level, giving Y — the next thread in that queue — a turn. SCHED_FIFO, by contrast, would let X run until it blocks or yields voluntarily, with no time-slicing."
+  },
+  {
+    tag: "ipc",
+    q: "What is the key structural difference between a QNX <b>pulse</b> and a full QNX <b>message</b>?",
+    opts: [
+      "Pulses can only be sent between threads in the same process",
+      "Pulses are non-blocking, fixed-size, and carry no reply — messages are synchronous and support MsgReply()",
+      "Pulses always have higher scheduling priority than messages",
+      "Pulses require a channel but messages do not"
+    ],
+    correct: 1,
+    explain: "A <b>pulse</b> is a small, fixed-size, non-blocking notification (commonly used by interrupt handlers or timers via SIGEV_PULSE) — the sender doesn't block and there's no reply. A full <b>message</b> sent via MsgSend() is synchronous and blocking, and expects the receiver to eventually call MsgReply(). Both actually require a channel (ChannelCreate()/ConnectAttach()) to be delivered."
+  },
+  {
+    tag: "sync",
+    q: "Which primitive would you choose to signal 'N items are now available in a bounded buffer' to multiple waiting consumer threads, where each signal should wake exactly one waiter?",
+    opts: [
+      "A mutex, locked once per item produced",
+      "A counting semaphore, posted once per item produced",
+      "A condition variable broadcast, since it wakes all waiters",
+      "An atomic increment on a shared integer with busy-waiting"
+    ],
+    correct: 1,
+    explain: "A <b>counting semaphore</b> is designed exactly for this producer/consumer pattern: each <b>sem_post()</b> increments the count and wakes one blocked waiter via <b>sem_wait()</b>, cleanly matching one signal to one consumer. A mutex has no notion of a count, and a condvar broadcast would wake every waiter even if only one item became available, causing a thundering-herd and requiring extra guard logic."
+  },
+  {
+    tag: "irq",
+    q: "Why does QNX recommend using <code>InterruptAttachEvent()</code> combined with a dedicated handler thread, rather than doing significant work inside an <code>InterruptAttach()</code> ISR?",
+    opts: [
+      "InterruptAttachEvent() executes faster at the hardware level",
+      "It moves substantial processing out of restricted ISR context into a normal, schedulable thread that can block, use mutexes, and call most kernel services",
+      "InterruptAttach() handlers are deprecated in QNX 8.0",
+      "It removes the need for interrupt masking entirely"
+    ],
+    correct: 1,
+    explain: "<b>InterruptAttachEvent()</b> lets the ISR do the absolute minimum (e.g. acknowledge hardware, clear the interrupt source) and then deliver an event (typically a pulse) that wakes a dedicated handler thread. That thread runs in normal thread context, so it can block, take mutexes, and call the full range of kernel/IPC services that a true ISR cannot — a pattern often called a 'top half / bottom half' split."
+  },
+  {
+    tag: "threads",
+    q: "A high-priority thread calls <code>pthread_cond_wait()</code> on a condition variable. What must be true about the associated mutex at the moment this call is made, and what does the kernel do with it during the wait?",
+    opts: [
+      "The mutex must be unlocked before calling; the kernel ignores it entirely",
+      "The mutex must be locked by the calling thread; the kernel atomically unlocks it for the duration of the wait and re-locks it before returning",
+      "The mutex is optional and only used for debugging condvar state",
+      "The mutex is destroyed and recreated automatically by pthread_cond_wait()"
+    ],
+    correct: 1,
+    explain: "The caller must hold the mutex locked when entering <b>pthread_cond_wait()</b>. The kernel then <b>atomically</b> unlocks the mutex and blocks the thread on the condvar, preventing the classic race where a signal could be missed between unlocking and waiting. When woken, the thread re-acquires the mutex before the call returns, so the caller's critical section invariant holds throughout."
+  },
+  {
+    tag: "ipc",
+    q: "A server manages a shared resource accessed by multiple client processes purely via QNX native IPC (MsgSend/MsgReceive/MsgReply), with no shared memory or mutexes involved. Why is this approach inherently free of classic race conditions on the resource?",
+    opts: [
+      "Because QNX automatically serializes all system calls across processes",
+      "Because the server processes one MsgReceive()-derived request at a time within its own thread, so resource access is naturally serialized through message ordering rather than shared-memory locking",
+      "Because MsgSend() acquires a global kernel mutex on the target resource automatically",
+      "Because pulses guarantee mutual exclusion between all senders"
+    ],
+    correct: 1,
+    explain: "This is the core idea behind QNX's message-passing IPC model: since the server thread handles requests one at a time as it loops on <b>MsgReceive()</b>, access to whatever resource the server owns is naturally serialized by the order in which messages are received — no explicit locking is required because there's no shared memory being concurrently accessed in the first place. (A multithreaded server pool would reintroduce the need for locking within the server itself.)"
+  }
+];
+
+let answered = new Array(QUESTIONS.length).fill(false);
+let correctCount = 0;
+
+function renderQuiz(){
+  const root = document.getElementById('quizRoot');
+  root.innerHTML = '';
+  QUESTIONS.forEach((item, qi) => {
+    const card = document.createElement('div');
+    card.className = 'q';
+    card.id = 'q' + qi;
+
+    const tagLabelMap = { threads: 'Threads', ipc: 'IPC', sync: 'Sync Primitives', irq: 'Interrupts' };
+
+    card.innerHTML = `
+      <div class="q-head">
+        <div class="q-num">${qi + 1}</div>
+        <div class="q-meta">
+          <span class="tag ${item.tag}">${tagLabelMap[item.tag]}</span>
+          <div class="q-text">${item.q}</div>
+        </div>
+      </div>
+      <div class="opts" id="opts${qi}"></div>
+      <div class="explain" id="explain${qi}"></div>
+    `;
+    root.appendChild(card);
+
+    const optsWrap = card.querySelector(`#opts${qi}`);
+    const keys = ['A','B','C','D'];
+    item.opts.forEach((optText, oi) => {
+      const btn = document.createElement('button');
+      btn.className = 'opt';
+      btn.innerHTML = `<span class="opt-key">${keys[oi]}</span><span class="opt-text">${optText}</span><span class="opt-icon"></span>`;
+      btn.onclick = () => selectAnswer(qi, oi);
+      optsWrap.appendChild(btn);
+    });
+  });
+  updateScorebar();
+}
+
+function selectAnswer(qi, oi){
+  if(answered[qi]) return; // lock after first choice
+  answered[qi] = true;
+
+  const item = QUESTIONS[qi];
+  const card = document.getElementById('q' + qi);
+  const optsWrap = document.getElementById('opts' + qi);
+  const buttons = optsWrap.querySelectorAll('.opt');
+  const isCorrect = (oi === item.correct);
+
+  buttons.forEach((btn, idx) => {
+    btn.disabled = true;
+    if(idx === item.correct){
+      btn.classList.add('correct');
+      btn.querySelector('.opt-icon').textContent = '✓';
+    } else if(idx === oi && !isCorrect){
+      btn.classList.add('selected-wrong');
+      btn.querySelector('.opt-icon').textContent = '✕';
+    } else {
+      btn.classList.add('faded');
+    }
+  });
+
+  card.classList.add('answered');
+  if(!isCorrect){
+    card.classList.add('wrong');
+  } else {
+    correctCount++;
+  }
+
+  const ex = document.getElementById('explain' + qi);
+  ex.innerHTML = item.explain;
+  ex.classList.add('show');
+
+  updateScorebar();
+  checkComplete();
+}
+
+function updateScorebar(){
+  const answeredN = answered.filter(Boolean).length;
+  document.getElementById('scoreVal').textContent = correctCount;
+  document.getElementById('answeredCount').textContent = `${answeredN}/${QUESTIONS.length} answered`;
+  document.getElementById('trackFill').style.width = (answeredN / QUESTIONS.length * 100) + '%';
+}
+
+function checkComplete(){
+  if(answered.every(Boolean)){
+    const box = document.getElementById('resultBox');
+    document.getElementById('finalScore').textContent = correctCount;
+    let verdict;
+    if(correctCount === 10) verdict = "Clean sweep — kernel internals are solid.";
+    else if(correctCount >= 8) verdict = "Strong grasp of QNX scheduling, IPC, and IRQ handling.";
+    else if(correctCount >= 5) verdict = "Decent foundation — revisit priority inheritance and ISR restrictions.";
+    else verdict = "Worth another pass through threads, IPC, and interrupt handling.";
+    document.getElementById('verdictText').textContent = verdict;
+    box.classList.add('show');
+  }
+}
+
+function resetQuiz(){
+  answered = new Array(QUESTIONS.length).fill(false);
+  correctCount = 0;
+  document.getElementById('resultBox').classList.remove('show');
+  renderQuiz();
+  window.scrollTo({top: 0, behavior: 'smooth'});
+}
+
+renderQuiz();
+</script>
+</body>
+</html>
